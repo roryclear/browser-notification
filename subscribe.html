@@ -1,0 +1,81 @@
+<label for="vapidKey">VAPID public key</label>
+<input
+  id="vapidKey"
+  type="text"
+  size="90"
+  autocomplete="off"
+  spellcheck="false"
+  placeholder="Paste the base64url public key here (87 chars, starts with B)"
+/>
+<br />
+<button id="subscribe">Get Notifications</button>
+<pre id="output"></pre>
+
+<script>
+  const diag =
+    "isSecureContext: " + isSecureContext + "\n" +
+    "serviceWorker in navigator: " + ("serviceWorker" in navigator) + "\n" +
+    "PushManager in window: " + ("PushManager" in window) + "\n" +
+    "Notification in window: " + ("Notification" in window) + "\n" +
+    "origin: " + location.origin + "\n" +
+    "standalone (iOS): " + (window.navigator.standalone ?? "n/a");
+  alert(diag);
+</script>
+
+<script>
+  const keyInput = document.querySelector("#vapidKey");
+  const output = document.querySelector("#output");
+
+  keyInput.value = localStorage.getItem("vapidPublicKey") || "";
+
+  function base64UrlToBytes(value) {
+    const padded = value + "=".repeat((4 - value.length % 4) % 4);
+    const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  }
+
+  document.querySelector("#subscribe").onclick = async () => {
+    try {
+      const vapidPublicKey = keyInput.value.trim();
+      if (!vapidPublicKey) {
+        throw new Error("Enter the VAPID public key first.");
+      }
+
+      // Fail loudly on a malformed key instead of getting a cryptic
+      // InvalidAccessError out of subscribe().
+      const keyBytes = base64UrlToBytes(vapidPublicKey);
+      if (keyBytes.length !== 65 || keyBytes[0] !== 0x04) {
+        throw new Error(
+          "VAPID key looks wrong — expected 65 bytes starting with 0x04, " +
+          "got " + keyBytes.length + " bytes starting with 0x" +
+          keyBytes[0].toString(16)
+        );
+      }
+      localStorage.setItem("vapidPublicKey", vapidPublicKey);
+
+      if (!("serviceWorker" in navigator) ||
+          !("PushManager" in window)) {
+        throw new Error("Push is not supported by this browser.");
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        throw new Error("Notification permission was not granted.");
+      }
+
+      await navigator.serviceWorker.register("./sw.js");
+      const registration = await navigator.serviceWorker.ready;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: keyBytes
+      });
+
+      const json = JSON.stringify(subscription, null, 2);
+      output.textContent = json;
+      console.log(json);
+    } catch (error) {
+      output.textContent = error.message;
+    }
+  };
+</script>
