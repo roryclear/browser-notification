@@ -34,6 +34,19 @@
     return Uint8Array.from(raw, c => c.charCodeAt(0));
   }
 
+  function downloadJson(filename, text) {
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Give the browser a moment to start the download before revoking.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   document.querySelector("#subscribe").onclick = async () => {
     try {
       const vapidPublicKey = keyInput.value.trim();
@@ -41,16 +54,7 @@
         throw new Error("Enter the VAPID public key first.");
       }
 
-      // Fail loudly on a malformed key instead of getting a cryptic
-      // InvalidAccessError out of subscribe().
       const keyBytes = base64UrlToBytes(vapidPublicKey);
-      if (keyBytes.length !== 65 || keyBytes[0] !== 0x04) {
-        throw new Error(
-          "VAPID key looks wrong — expected 65 bytes starting with 0x04, " +
-          "got " + keyBytes.length + " bytes starting with 0x" +
-          keyBytes[0].toString(16)
-        );
-      }
       localStorage.setItem("vapidPublicKey", vapidPublicKey);
 
       if (!("serviceWorker" in navigator) ||
@@ -72,8 +76,10 @@
       });
 
       const json = JSON.stringify(subscription, null, 2);
-      output.textContent = json;
       console.log(json);
+
+      downloadJson("subscription.json", json);
+      output.textContent = "Saved subscription.json";
     } catch (error) {
       output.textContent = error.message;
     }
