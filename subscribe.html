@@ -78,8 +78,8 @@
       const json = JSON.stringify(subscription, null, 2);
       console.log(json);
 
-      downloadJson("subscription.json", json);
-      output.textContent = "Saved subscription.json";
+      downloadJson("notif_keys.json", json);
+      output.textContent = "notif_keys.json";
     } catch (error) {
       output.textContent = error.message;
     }

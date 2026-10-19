@@ -2,7 +2,7 @@
 import json
 from pywebpush import webpush
 
-with open("subscription.json") as f:
+with open("notif_keys.json") as f:
     subscription = json.load(f)
 
 response = webpush(
