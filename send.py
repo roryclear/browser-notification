@@ -4,9 +4,9 @@ import base64
 from typing import cast
 from urllib.parse import urlparse
 import requests
+import binascii
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
-from py_vapid import Vapid
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -15,6 +15,89 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 import os, struct
+
+import os
+import time
+import copy
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec, utils
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes
+
+def num_to_bytes(n, pad_to):
+    h = "%x" % n
+    r = binascii.unhexlify("0" * (len(h) % 2) + h)
+    return b"\x00" * (pad_to - len(r)) + r
+
+def sign(claims, key):
+    header = b64urlencode(b"""{"typ":"JWT","alg":"ES256"}""")
+    # Unfortunately, chrome seems to require the claims to be sorted.
+    claims = b64urlencode(
+        json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf8")
+    )
+    token = "{}.{}".format(header, claims)
+    rsig = key.sign(token.encode("utf8"), ec.ECDSA(hashes.SHA256()))
+    r, s = utils.decode_dss_signature(rsig)
+    sig = b64urlencode(num_to_bytes(r, 32) + num_to_bytes(s, 32))
+    return "{}.{}".format(token, sig)
+
+def b64urldecode(data):
+    padded = data.replace(b"+", b"-").replace(b"/", b"_") + b"===="[len(data) % 4 :]
+    return base64.urlsafe_b64decode(padded)
+
+def b64urlencode(data): return base64.urlsafe_b64encode(data).replace(b"=", b"").decode("utf8")
+
+class Vapid:
+    def __init__(self, private_key=None):
+        self._schema = "vapid"
+        self.conf = {}
+        self._private_key = private_key
+        self._public_key = self._private_key.public_key()
+
+    @classmethod
+    def from_pem(cls, private_key): return cls.from_der(b"".join(private_key.splitlines()[1:-1]))
+
+    @classmethod
+    def from_der(cls, private_key):
+        key = serialization.load_der_private_key(b64urldecode(private_key), password=None, backend=default_backend())
+        return cls(key)
+
+    @classmethod
+    def from_file(cls, private_key_file=None):
+        with open(private_key_file, "r") as file:
+            private_key = file.read()
+        vapid = cls.from_pem(private_key.encode("utf8"))
+        return vapid      
+
+    def _base_sign(self, claims):
+        cclaims = copy.deepcopy(claims)
+        cclaims["exp"] = int(time.time()) + 86400
+        return cclaims
+
+    def sign(self, claims):
+        sig = sign(self._base_sign(claims), self._private_key)
+        pkey = self._public_key.public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+        )
+        return {
+            "Authorization": "{schema} t={t},k={k}".format(
+                schema=self._schema, t=sig, k=b64urlencode(pkey)
+            )
+        }
+
+    @classmethod
+    def verify(cls, auth):
+        pref_tok = auth.rsplit(" ", 1)
+        parts = {}
+        for tok in pref_tok[1].split(","):
+            kv = tok.split("=", 1)
+            parts[kv[0]] = kv[1]
+        kp = cls().from_raw_public(parts["k"].encode())
+        tokens = parts["t"].rsplit(".", 1)
+        return kp.verify_token(
+            validation_token=tokens[0].encode(), verification_token=tokens[1]
+        )
 
 MAX_RECORD_SIZE = pow(2, 31) - 1
 MIN_RECORD_SIZE = 3
