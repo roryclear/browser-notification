@@ -813,128 +813,26 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
     return construct(curve=_curve_name, point_x=x, point_y=y)
 
 
-def _import_subjectPublicKeyInfo(encoded, *kwargs):
-    """Convert a subjectPublicKeyInfo into an EccKey object"""
-
-    # See RFC5480
-
-    # Parse the generic subjectPublicKeyInfo structure
-    oid, ec_point, params = _expand_subject_public_key_info(encoded)
-
-    nist_p_oids = (
-        "1.2.840.10045.2.1",  # id-ecPublicKey (unrestricted)
-        "1.3.132.1.12",  # id-ecDH
-        "1.3.132.1.13",  # id-ecMQV
-    )
-    eddsa_oids = {
-        "1.3.101.112": ("Ed25519", _import_ed25519_public_key),  # id-Ed25519
-        "1.3.101.113": ("Ed448", _import_ed448_public_key),  # id-Ed448
-    }
-    xdh_oids = {
-        "1.3.101.110": ("Curve25519", _import_curve25519_public_key),  # id-X25519
-        "1.3.101.111": ("Curve448", _import_curve448_public_key),  # id-X448
-    }
-
-    if oid in nist_p_oids:
-        # See RFC5480
-
-        # Parameters are mandatory and encoded as ECParameters
-        # ECParameters ::= CHOICE {
-        #   namedCurve         OBJECT IDENTIFIER
-        #   -- implicitCurve   NULL
-        #   -- specifiedCurve  SpecifiedECDomain
-        # }
-        # implicitCurve and specifiedCurve are not supported (as per RFC)
-        if not params:
-            raise ValueError("Missing ECC parameters for ECC OID %s" % oid)
-        try:
-            curve_oid = DerObjectId().decode(params).value
-        except ValueError:
-            raise ValueError("Error decoding namedCurve")
-
-        # ECPoint ::= OCTET STRING
-        return _import_public_der(ec_point, curve_oid=curve_oid)
-
-    elif oid in eddsa_oids:
-        # See RFC8410
-        curve_name, import_eddsa_public_key = eddsa_oids[oid]
-
-        # Parameters must be absent
-        if params:
-            raise ValueError("Unexpected ECC parameters for ECC OID %s" % oid)
-
-        x, y = import_eddsa_public_key(ec_point)
-        return construct(point_x=x, point_y=y, curve=curve_name)
-
-    elif oid in xdh_oids:
-        curve_name, import_xdh_public_key = xdh_oids[oid]
-
-        # Parameters must be absent
-        if params:
-            raise ValueError("Unexpected ECC parameters for ECC OID %s" % oid)
-
-        x = import_xdh_public_key(ec_point)
-        return construct(point_x=x, curve=curve_name)
-
-    else:
-        raise UnsupportedEccFeature("Unsupported ECC OID: %s" % oid)
-
 
 def _import_rfc5915_der(
     encoded: bytes, passphrase: Optional[bytes], curve_oid: Optional[str] = None
 ) -> EccKey:
-    # See RFC5915 https://tools.ietf.org/html/rfc5915
-    #
-    # ECPrivateKey ::= SEQUENCE {
-    #           version        INTEGER { ecPrivkeyVer1(1) } (ecPrivkeyVer1),
-    #           privateKey     OCTET STRING,
-    #           parameters [0] ECParameters {{ NamedCurve }} OPTIONAL,
-    #           publicKey  [1] BIT STRING OPTIONAL
-    #    }
-
     ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
-    if ec_private_key[0] != 1:
-        raise ValueError("Incorrect ECC private key version")
-
     scalar_bytes = DerOctetString().decode(ec_private_key[1]).payload
-
     next_element = 2
-
-    # Try to decode 'parameters'
-    if next_element < len(ec_private_key):
-        try:
-            parameters = DerObjectId(explicit=0).decode(ec_private_key[next_element]).value
-            if curve_oid is not None and parameters != curve_oid:
-                raise ValueError("Curve mismatch")
-            curve_oid = parameters
-            next_element += 1
-        except ValueError:
-            pass
-
-    if curve_oid is None:
-        raise ValueError("No curve found")
 
     for curve_name, curve in _curves.items():  # noqa: B007 (used after the loop)
         if curve.oid == curve_oid:
             break
-    else:
-        raise UnsupportedEccFeature("Unsupported ECC curve (OID: %s)" % curve_oid)
-
-    modulus_bytes = curve.p.size_in_bytes()
-    if len(scalar_bytes) != modulus_bytes:
-        raise ValueError("Private key is too small")
 
     # Try to decode 'publicKey'
     point_x = point_y = None
     if next_element < len(ec_private_key):
-        try:
-            public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
-            public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
-            point_x = public_key.pointQ.x
-            point_y = public_key.pointQ.y
-            next_element += 1
-        except ValueError:
-            pass
+        public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
+        public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
+        point_x = public_key.pointQ.x
+        point_y = public_key.pointQ.y
+        next_element += 1
 
     d = Integer.from_bytes(scalar_bytes)
     return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
@@ -942,299 +840,30 @@ def _import_rfc5915_der(
 
 def _import_pkcs8(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
     from Crypto.IO import PKCS8
-
     unwrapped = PKCS8.unwrap(encoded, passphrase, max_iteration_count, threads=threads, max_memory=max_memory)
-    algo_oid, private_key, params = unwrapped
-
-    nist_p_oids = (
-        "1.2.840.10045.2.1",  # id-ecPublicKey (unrestricted)
-        "1.3.132.1.12",  # id-ecDH
-        "1.3.132.1.13",  # id-ecMQV
-    )
-    eddsa_oids = {
-        "1.3.101.112": ("Ed25519", _import_ed25519_public_key),  # id-Ed25519
-        "1.3.101.113": ("Ed448", _import_ed448_public_key),  # id-Ed448
-    }
-    xdh_oids = {
-        "1.3.101.110": ("Curve25519", _import_curve25519_public_key),  # id-X25519
-        "1.3.101.111": ("Curve448", _import_curve448_public_key),  # id-X448
-    }
-
+    _, private_key, params = unwrapped
     # The optional publicKey of a OneAsymmetricKey (RFC 5958),
     # which must match the private key
     public_key = unwrapped.public_key
 
-    if algo_oid in nist_p_oids:
-        curve_oid = DerObjectId().decode(params).value
-        key = _import_rfc5915_der(private_key, passphrase, curve_oid)
-        if public_key is not None:
-            # ECPoint (RFC 5480), as in the subjectPublicKeyInfo
-            point = _import_public_der(public_key, curve_oid=curve_oid).pointQ
-    elif algo_oid in eddsa_oids:
-        curve_name, import_eddsa_public_key = eddsa_oids[algo_oid]
-        if params is not None:
-            raise ValueError("EdDSA ECC private key must not have parameters")
-        seed = DerOctetString().decode(private_key).payload
-        key = construct(curve=curve_name, seed=seed)
-        if public_key is not None:
-            x, y = import_eddsa_public_key(public_key)
-            point = construct(curve=curve_name, point_x=x, point_y=y).pointQ
-    elif algo_oid in xdh_oids:
-        curve_name, import_xdh_public_key = xdh_oids[algo_oid]
-        if params is not None:
-            raise ValueError("%s ECC private key must not have parameters" % curve_name)
-        seed = DerOctetString().decode(private_key).payload
-        key = construct(curve=curve_name, seed=seed)
-        if public_key is not None:
-            x = import_xdh_public_key(public_key)
-            point = construct(curve=curve_name, point_x=x).pointQ
-    else:
-        raise UnsupportedEccFeature("Unsupported ECC purpose (OID: %s)" % algo_oid)
-
-    if public_key is not None and point != key.pointQ:
-        raise ValueError("Private and public ECC keys do not match")
+    curve_oid = DerObjectId().decode(params).value
+    key = _import_rfc5915_der(private_key, passphrase, curve_oid)
+    if public_key is not None:
+        # ECPoint (RFC 5480), as in the subjectPublicKeyInfo
+        point = _import_public_der(public_key, curve_oid=curve_oid).pointQ
 
     return key
 
 
-def _import_x509_cert(encoded, *kwargs):
-    sp_info = _extract_subject_public_key_info(encoded)
-    return _import_subjectPublicKeyInfo(sp_info)
 
 
 def _import_der(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
-    try:
-        return _import_subjectPublicKeyInfo(encoded, passphrase)
-    except UnsupportedEccFeature as err:
-        raise err
-    except (ValueError, TypeError, IndexError):
-        pass
-
-    try:
-        return _import_x509_cert(encoded, passphrase)
-    except UnsupportedEccFeature as err:
-        raise err
-    except (ValueError, TypeError, IndexError):
-        pass
-
-    try:
-        return _import_rfc5915_der(encoded, passphrase)
-    except UnsupportedEccFeature as err:
-        raise err
-    except (ValueError, TypeError, IndexError):
-        pass
-
-    try:
-        return _import_pkcs8(encoded, passphrase, max_iteration_count, threads, max_memory)
-    except (UnsupportedEccFeature, KdfLimitError, PassphraseRequiredError, IncorrectPassphraseError):
-        raise
-    except (ValueError, TypeError, IndexError):
-        pass
-
-    raise ValueError("Not an ECC DER key")
-
-
-def _import_openssh_public(encoded):
-    parts = encoded.split(b" ")
-    if len(parts) not in (2, 3):
-        raise ValueError("Not an openssh public key")
-
-    try:
-        keystring = binascii.a2b_base64(parts[1])
-
-        keyparts = []
-        while len(keystring) > 4:
-            lk = struct.unpack(">I", keystring[:4])[0]
-            keyparts.append(keystring[4 : 4 + lk])
-            keystring = keystring[4 + lk :]
-
-        if parts[0] != keyparts[0]:
-            raise ValueError("Mismatch in openssh public key")
-
-        # NIST P curves
-        if parts[0].startswith(b"ecdsa-sha2-"):
-            for _curve_name, curve in _curves.items():
-                if curve.openssh is None:
-                    continue
-                if not curve.openssh.startswith("ecdsa-sha2"):
-                    continue
-                middle = tobytes(curve.openssh.split("-")[2])
-                if keyparts[1] == middle:
-                    break
-            else:
-                raise ValueError("Unsupported ECC curve: " + middle)
-
-            ecc_key = _import_public_der(keyparts[2], curve_oid=curve.oid)
-
-        # EdDSA
-        elif parts[0] == b"ssh-ed25519":
-            x, y = _import_ed25519_public_key(keyparts[1])
-            ecc_key = construct(curve="Ed25519", point_x=x, point_y=y)
-        else:
-            raise ValueError("Unsupported SSH key type: " + parts[0])
-
-    except (IndexError, TypeError, binascii.Error):
-        raise ValueError("Error parsing SSH key type: " + parts[0])
-
-    return ecc_key
-
-
-def _import_openssh_private_ecc(data, password, max_iteration_count=None):
-    from ._openssh import check_padding, import_openssh_private_generic, read_bytes, read_string
-
-    key_type, decrypted = import_openssh_private_generic(data, password, max_iteration_count)
-
-    eddsa_keys = {
-        "ssh-ed25519": ("Ed25519", _import_ed25519_public_key, 32),
-    }
-
-    # https://datatracker.ietf.org/doc/html/draft-miller-ssh-agent-04
-    if key_type.startswith("ecdsa-sha2"):
-        ecdsa_curve_name, decrypted = read_string(decrypted)
-        if ecdsa_curve_name not in _curves:
-            raise UnsupportedEccFeature("Unsupported ECC curve %s" % ecdsa_curve_name)
-        curve = _curves[ecdsa_curve_name]
-        modulus_bytes = (curve.modulus_bits + 7) // 8
-
-        public_key, decrypted = read_bytes(decrypted)
-
-        if public_key[0] != 4:
-            raise ValueError("Only uncompressed OpenSSH EC keys are supported")
-        if len(public_key) != 2 * modulus_bytes + 1:
-            raise ValueError("Incorrect public key length")
-
-        point_x = Integer.from_bytes(public_key[1 : 1 + modulus_bytes])
-        point_y = Integer.from_bytes(public_key[1 + modulus_bytes :])
-
-        private_key, decrypted = read_bytes(decrypted)
-        d = Integer.from_bytes(private_key)
-
-        params = {"d": d, "curve": ecdsa_curve_name}
-
-    elif key_type in eddsa_keys:
-        curve_name, import_eddsa_public_key, seed_len = eddsa_keys[key_type]
-
-        public_key, decrypted = read_bytes(decrypted)
-        point_x, point_y = import_eddsa_public_key(public_key)
-
-        private_public_key, decrypted = read_bytes(decrypted)
-        seed = private_public_key[:seed_len]
-
-        params = {"seed": seed, "curve": curve_name}
-    else:
-        raise ValueError("Unsupported SSH agent key type: " + key_type)
-
-    _, padded = read_string(decrypted)  # Comment
-    check_padding(padded)
-
-    return construct(point_x=point_x, point_y=point_y, **params)
-
-
-def _import_ed25519_public_key(encoded: bytes) -> tuple[Int, Int]:
-    """Import an Ed25519 ECC public key, encoded as raw bytes as described
-    in RFC8032_.
-
-    Args:
-      encoded (bytes):
-        The Ed25519 public key to import. It must be 32 bytes long.
-
-    Returns:
-      x and y (integer)
-
-    Raises:
-      ValueError: when the given key cannot be parsed.
-
-    .. _RFC8032: https://datatracker.ietf.org/doc/html/rfc8032
-    """
-
-    if len(encoded) != 32:
-        raise ValueError("Incorrect length. Only Ed25519 public keys are supported.")
-
-    try:
-        point = EccPoint._decode_eddsa(encoded, "Ed25519")
-    except ValueError:
-        raise ValueError("Invalid Ed25519 public key")
-    return point.xy
-
-
-def _import_curve25519_public_key(encoded):
-    """Import a Curve25519 ECC public key,
-    encoded as raw bytes as described in RFC7748_.
-
-    Args:
-      encoded (bytes):
-        The Curve25519 public key to import. It must be 32 bytes long.
-
-    Returns:
-      x (integer)
-
-    Raises:
-      ValueError: when the given key cannot be parsed.
-
-    .. _RFC7748: https://datatracker.ietf.org/doc/html/rfc7748
-    """
-
-    if len(encoded) != 32:
-        raise ValueError("Incorrect Curve25519 key length")
-
-    x = bytearray(encoded)
-    # RFC 7741, Section 5
-    x[31] &= 0x7F
-    point_x = Integer.from_bytes(x, byteorder="little")
-
-    return point_x
-
-
-def _import_curve448_public_key(encoded):
-    """Import a Curve448 ECC public key,
-    encoded as raw bytes as described in RFC7748_.
-
-    Args:
-      encoded (bytes):
-        The Curve448 public key to import. It must be 56 bytes long.
-
-    Returns:
-      x (integer)
-
-    Raises:
-      ValueError: when the given key cannot be parsed.
-
-    .. _RFC7748: https://datatracker.ietf.org/doc/html/rfc7748
-    """
-
-    if len(encoded) != 56:
-        raise ValueError("Incorrect Curve448 key length")
-
-    point_x = Integer.from_bytes(encoded, byteorder="little")
-
-    return point_x
-
-
-def _import_ed448_public_key(encoded: bytes) -> tuple[Int, Int]:
-    """Import an Ed448 ECC public key, encoded as raw bytes as described
-    in RFC8032_.
-
-    Args:
-      encoded (bytes):
-        The Ed448 public key to import. It must be 57 bytes long.
-
-    Returns:
-        x and y (integer)
-
-    Raises:
-      ValueError: when the given key cannot be parsed.
-
-    .. _RFC8032: https://datatracker.ietf.org/doc/html/rfc8032
-    """
-
-    if len(encoded) != 57:
-        raise ValueError("Incorrect length. Only Ed448 public keys are supported.")
-
-    try:
-        point = EccPoint._decode_eddsa(encoded, "Ed448")
-    except ValueError:
-        raise ValueError("Invalid Ed448 public key")
-    return point.xy
+    return _import_pkcs8(encoded, passphrase, max_iteration_count, threads, max_memory)
+
+def _import_ed25519_public_key(encoded: bytes) -> tuple[Int, Int]: pass
+def _import_curve25519_public_key(encoded): pass
+def _import_curve448_public_key(encoded): pass
+def _import_ed448_public_key(encoded: bytes) -> tuple[Int, Int]: pass
 
 
 def import_key(
@@ -1246,134 +875,13 @@ def import_key(
     threads: int = 1,
     max_memory: Optional[int] = None,
 ) -> EccKey:
-    """Import an ECC key (public or private).
-
-    Args:
-      encoded (bytes or multi-line string):
-        The ECC key to import.
-        The function will try to automatically detect the right format.
-
-        Supported formats for an ECC **public** key:
-
-        * X.509 certificate: binary (DER) or ASCII (PEM).
-        * X.509 ``subjectPublicKeyInfo``: binary (DER) or ASCII (PEM).
-        * SEC1_ (or X9.62), as ``bytes``. NIST P curves only.
-          You must also provide the ``curve_name`` (with a value from the `ECC table`_)
-        * OpenSSH line, defined in RFC5656_ and RFC8709_ (ASCII).
-          This is normally the content of files like ``~/.ssh/id_ecdsa.pub``.
-
-        Supported formats for an ECC **private** key:
-
-        * A binary ``ECPrivateKey`` structure, as defined in `RFC5915`_ (DER).
-          NIST P curves only.
-        * A `PKCS#8`_ structure (or the more recent Asymmetric Key
-          Package, RFC5958_): binary (DER) or ASCII (PEM).
-        * `OpenSSH 6.5`_ and newer versions (ASCII).
-
-        Private keys can be in the clear or password-protected.
-
-        For details about the PEM encoding, see `RFC1421`_/`RFC1423`_.
-
-      passphrase (byte string):
-        The passphrase to use for decrypting a private key.
-        Encryption may be applied protected at the PEM level (not recommended)
-        or at the PKCS#8 level (recommended).
-        This parameter is ignored if the key in input is not encrypted.
-
-      curve_name (string):
-        For a SEC1 encoding only. This is the name of the curve,
-        as defined in the `ECC table`_.
-
-      max_iteration_count (integer):
-        The maximum value allowed for the PBKDF2 iteration count or
-        the scrypt cost *N·r·p/8* (that is, *N* for the usual *r=8* and *p=1*)
-        of a `PKCS#8`_ encrypted key, or for the number of rounds of
-        bcrypt_pbkdf of an encrypted OpenSSH key.
-        A malicious key could require an extremely high number of
-        iterations, tying up the CPU for hours.
-        The default value is None: a limit for each KDF, which keeps
-        the key derivation to about one minute at most
-        (see :ref:`the limits for decryption<pkcs8_limits>`).
-        Set it to ``0`` to disable the check.
-
-      threads (integer):
-        The maximum number of threads used to derive the decryption key
-        with scrypt (default: 1, no extra threads; 0 for all CPU cores).
-        Only a `PKCS#8`_ key protected with scrypt and a parallelization
-        parameter larger than 1 can use them.
-
-      max_memory (integer):
-        The maximum memory (in bytes) for the key derivation of a `PKCS#8`_
-        encrypted key, as a limit on the **total** of all threads together
-        (not on each thread).
-        Only scrypt uses a significant amount: 128 · (*N* + 2) · *r* bytes for
-        **each** thread, plus 256 · *r* · *p* bytes for all the flows together.
-        If the requested threads do not fit, fewer are used (down to one);
-        if a single thread does not fit, the key is rejected.
-        The default value is None (a limit of 256 MiB).
-        Set it to ``0`` to disable the check.
-
-    .. note::
-
-        To import EdDSA private and public keys, when encoded as raw ``bytes``, use:
-
-        * :func:`Crypto.Signature.eddsa.import_public_key`, or
-        * :func:`Crypto.Signature.eddsa.import_private_key`.
-
-    .. note::
-
-        To import X25519/X448 private and public keys, when encoded as raw ``bytes``, use:
-
-        * :func:`Crypto.Protocol.DH.import_x25519_public_key`
-        * :func:`Crypto.Protocol.DH.import_x25519_private_key`
-        * :func:`Crypto.Protocol.DH.import_x448_public_key`
-        * :func:`Crypto.Protocol.DH.import_x448_private_key`
-
-    Returns:
-      :class:`EccKey` : a new ECC key object
-
-    Raises:
-      PassphraseRequiredError:
-        (a ``ValueError``) when the private key is encrypted,
-        but no passphrase was provided.
-      IncorrectPassphraseError:
-        (a ``ValueError``) when the private key cannot be decrypted
-        with the passphrase (most likely, the passphrase is wrong).
-      UnsupportedEccFeature:
-        (a ``ValueError``) when the key uses a curve or a feature
-        that is not supported.
-      ValueError: when the given key cannot be parsed.
-
-    .. _RFC1421: https://datatracker.ietf.org/doc/html/rfc1421
-    .. _RFC1423: https://datatracker.ietf.org/doc/html/rfc1423
-    .. _RFC5915: https://datatracker.ietf.org/doc/html/rfc5915
-    .. _RFC5656: https://datatracker.ietf.org/doc/html/rfc5656
-    .. _RFC8709: https://datatracker.ietf.org/doc/html/rfc8709
-    .. _RFC5958: https://datatracker.ietf.org/doc/html/rfc5958
-    .. _`PKCS#8`: https://datatracker.ietf.org/doc/html/rfc5958
-    .. _`OpenSSH 6.5`: https://flak.tedunangst.com/post/new-openssh-key-format-and-bcrypt-pbkdf
-    .. _SEC1: https://www.secg.org/sec1-v2.pdf
-    """
-
     from Crypto.IO import PEM, PKCS8
 
     PKCS8._check_kdf_params(max_iteration_count, threads, max_memory)
     encoded = tobytes(encoded)
-    if passphrase is not None:
-        passphrase = tobytes(passphrase)
 
-    # PEM
-    if encoded.startswith(b"-----BEGIN OPENSSH PRIVATE KEY"):
+    if encoded.startswith(b"-----"):
         text_encoded = encoded.decode("latin-1")
-        openssh_encoded, _marker, enc_flag = PEM.decode(text_encoded, passphrase)
-        result = _import_openssh_private_ecc(openssh_encoded, passphrase, max_iteration_count)
-        return result
-
-    elif encoded.startswith(b"-----"):
-        text_encoded = encoded.decode("latin-1")
-
-        # Remove any EC PARAMETERS section
-        # Ignore its content because the curve type must be already given in the key
         ecparams_start = "-----BEGIN EC PARAMETERS-----"
         ecparams_end = "-----END EC PARAMETERS-----"
         text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
@@ -1381,31 +889,9 @@ def import_key(
         der_encoded, _marker, enc_flag = PEM.decode(text_encoded, passphrase)
         if enc_flag:
             passphrase = None
-        try:
-            result = _import_der(der_encoded, passphrase, max_iteration_count, threads, max_memory)
-        except (
-            UnsupportedEccFeature,
-            KdfLimitError,
-            PassphraseRequiredError,
-            IncorrectPassphraseError,
-        ):
-            raise
-        except ValueError:
-            raise ValueError("Invalid DER encoding inside the PEM file")
+        result = _import_der(der_encoded, passphrase, max_iteration_count, threads, max_memory)
         return result
-
-    # OpenSSH
-    if encoded.startswith((b"ecdsa-sha2-", b"ssh-ed25519")):
-        return _import_openssh_public(encoded)
-
-    # DER
-    if len(encoded) > 0 and encoded[0] == 0x30:
-        return _import_der(encoded, passphrase, max_iteration_count, threads, max_memory)
 
     # SEC1
     if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04):
-        if curve_name is None:
-            raise ValueError("No curve name was provided")
         return _import_public_der(encoded, curve_name=curve_name)
-
-    raise ValueError("ECC key format is not supported")
