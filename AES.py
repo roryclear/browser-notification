@@ -11,8 +11,7 @@ def _create_cipher(factory, key, mode, *args, **kwargs):
     kwargs.pop("add_aes_modes", False)
 
     if mode == 1:
-        from Crypto.Cipher._mode_ecb import _create_ecb_cipher
-
+        from _mode_ecb import _create_ecb_cipher
         res = _create_ecb_cipher(factory, **kwargs)
 
     elif mode == 6:
