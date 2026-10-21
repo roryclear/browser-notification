@@ -23,13 +23,13 @@ from __future__ import annotations
 from typing import Optional, Union, Any
 import os
 import threading
+import abc
 
 import cffi
 ffi: Any = cffi.FFI()
 
 
 from Crypto.Util._raw_api import (
-    VoidPointer,
     c_uint8_ptr_len,
     create_string_buffer,
     load_pycryptodome_raw_lib,
@@ -62,6 +62,32 @@ def load_lib(name: str, cdecl: str) -> Any:
             ffi.cdef(cdecl)
             _declared.add(cdecl)
     return lib
+
+class _VoidPointer:
+    @abc.abstractmethod
+    def get(self) -> Any:
+        """Return the memory location we point to"""
+        return
+
+    @abc.abstractmethod
+    def address_of(self) -> Any:
+        """Return a raw pointer to this pointer"""
+        return
+
+class VoidPointer_cffi(_VoidPointer):
+    """Model a newly allocated pointer to void"""
+
+    def __init__(self):
+        self._pp = ffi.new("void *[1]")
+
+    def get(self):
+        return self._pp[0]
+
+    def address_of(self):
+        return self._pp
+
+def VoidPointer() -> _VoidPointer:
+    return VoidPointer_cffi()
 
 def load_pycryptodome_raw_lib(name: str, cdecl: str) -> Any:
     """Load a shared library and return a handle to it.
