@@ -1,9 +1,12 @@
 from typing import Any, Optional, Union
 import cffi
-from Crypto.Util._raw_api import (
-    create_output_buffer,
-    load_pycryptodome_raw_lib,
-)
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
+
+def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
+    result = cffi.FFI().new("uint8_t[]", init_or_size)
+    return result
+
+def create_output_buffer(size: int) -> Any: return create_string_buffer(size)
 
 def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
