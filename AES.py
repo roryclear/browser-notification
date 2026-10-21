@@ -6,21 +6,18 @@ from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 import cffi
 
 
-def _create_cipher(factory, key, mode, *args, **kwargs):
-    kwargs["key"] = key
-    kwargs.pop("add_aes_modes", False)
-
+def _create_cipher(factory, key, mode, **kwargs):
     if mode == 1:
         from _mode_ecb import _create_ecb_cipher
-        res = _create_ecb_cipher(factory, **kwargs)
+        res = _create_ecb_cipher(factory, key=key)
 
     elif mode == 6:
         from Crypto.Cipher._mode_ctr import _create_ctr_cipher
-        res = _create_ctr_cipher(factory, **kwargs)
+        res = _create_ctr_cipher(factory, key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
 
     elif mode == 11:
         from Crypto.Cipher._mode_gcm import _create_gcm_cipher
-        res = _create_gcm_cipher(factory, **kwargs)
+        res = _create_gcm_cipher(factory, key=key, nonce=kwargs["nonce"])
 
     return res
 
@@ -74,7 +71,6 @@ def _create_base_cipher(dict_parameters):
     return SmartPointer(cipher.get(), stop_operation)
 
 def new(key: Buffer, mode: int, *args: Any, **kwargs: Any) -> Any:
-    kwargs["add_aes_modes"] = True
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
 
 # Size of a data block (in bytes)
