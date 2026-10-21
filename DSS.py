@@ -38,7 +38,7 @@ class DssSigScheme:
 
     def sign(self, msg_hash: Hash) -> bytes:
         nonce = self._compute_nonce(msg_hash)
-        z = Integer.from_bytes(msg_hash.digest()[: self._order_bytes])
+        z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
         sig_pair = self._key._sign(z, nonce)
         output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
         return output
