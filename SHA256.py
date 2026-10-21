@@ -29,11 +29,7 @@ import cffi
 ffi: Any = cffi.FFI()
 
 
-from Crypto.Util._raw_api import (
-    c_uint8_ptr_len,
-    create_string_buffer,
-    load_pycryptodome_raw_lib,
-)
+from Crypto.Util._raw_api import c_uint8_ptr_len
 from Crypto.Util._file_system import pycryptodome_filename
 
 from importlib import machinery
@@ -62,6 +58,44 @@ def load_lib(name: str, cdecl: str) -> Any:
             ffi.cdef(cdecl)
             _declared.add(cdecl)
     return lib
+
+
+def load_pycryptodome_raw_lib(name: str, cdecl: str) -> Any:
+    """Load a shared library and return a handle to it.
+
+    @name,  the name of the library expressed as a PyCryptodome module,
+            for instance Crypto.Cipher._raw_cbc.
+
+    @cdecl, the C function declarations.
+    """
+
+    split = name.split(".")
+    dir_comps, basename = split[:-1], split[-1]
+    attempts = []
+    for ext in extension_suffixes:
+        try:
+            filename = basename + ext
+            full_name = pycryptodome_filename(dir_comps, filename)
+            if not os.path.isfile(full_name):
+                attempts.append("Not found '%s'" % filename)
+                continue
+            return load_lib(full_name, cdecl)
+        except OSError as exp:
+            attempts.append("Cannot load '%s': %s" % (filename, str(exp)))
+    raise OSError("Cannot load native module '%s': %s" % (name, ", ".join(attempts)))
+
+def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
+    """Allocate the given amount of bytes (initially set to 0)"""
+
+    if isinstance(init_or_size, bytes):
+        size = max(len(init_or_size) + 1, size or 0)
+        result = ffi.new("uint8_t[]", size)
+        result[:] = init_or_size
+    else:
+        if size:
+            raise ValueError("Size must be specified once only")
+        result = ffi.new("uint8_t[]", init_or_size)
+    return result
 
 class _VoidPointer:
     @abc.abstractmethod
