@@ -59,61 +59,7 @@ _SEED_LENGTHS = {
 }
 
 
-def _seed_to_scalar(curve_id: int, seed: bytes) -> tuple[Optional[bytes], Integer]:
-    """The prefix (EdDSA only) and the secret scalar of a seed.
-
-    RFC 8032 (5.1.5 and 5.2.5) for Ed25519 and Ed448: the scalar comes from
-    the hash of the seed. RFC 7748 (5) for X25519 and X448: the seed is the
-    scalar. In both cases, the scalar is clamped (little endian).
-    """
-
-    prefix = None
-    if curve_id == _CurveID.ED25519:
-        seed_hash = SHA512.new(seed).digest()
-        prefix, scalar = seed_hash[32:], bytearray(seed_hash[:32])
-    elif curve_id == _CurveID.ED448:
-        seed_hash = SHAKE256.new(seed).read(114)
-        prefix, scalar = seed_hash[57:], bytearray(seed_hash[:57])
-    else:
-        scalar = bytearray(seed)
-
-    if curve_id in (_CurveID.ED25519, _CurveID.CURVE25519):
-        scalar[0] &= 0xF8
-        scalar[31] = (scalar[31] & 0x7F) | 0x40
-    else:
-        scalar[0] &= 0xFC
-        scalar[55] |= 0x80
-        if curve_id == _CurveID.ED448:
-            scalar[56] = 0
-    return prefix, Integer.from_bytes(scalar, byteorder="little")
-
-
-class UnsupportedEccFeature(ValueError):
-    pass
-
-
 class EccKey:
-    r"""Class defining an ECC key.
-    Do not instantiate directly.
-    Use :func:`generate`, :func:`construct` or :func:`import_key` instead.
-
-    :ivar curve: The **canonical** name of the curve as defined in the `ECC table`_.
-    :vartype curve: string
-
-    :ivar pointQ: an ECC point representing the public component.
-    :vartype pointQ: :class:`EccPoint` or :class:`EccXPoint`
-
-    :ivar d: A scalar that represents the private component
-             in NIST P curves. It is smaller than the
-             order of the generator point.
-    :vartype d: integer
-
-    :ivar seed: A seed that represents the private component
-                in Ed22519 (32 bytes), Curve25519 (32 bytes),
-                Curve448 (56 bytes), Ed448 (57 bytes).
-    :vartype seed: bytes
-    """
-
     def __init__(
         self,
         *,
@@ -122,24 +68,6 @@ class EccKey:
         seed: Optional[bytes] = None,
         point: Optional[Union[EccPoint, EccXPoint]] = None,
     ) -> None:
-        """Create a new ECC key
-
-        Keywords:
-          curve : string
-            The name of the curve.
-          d : integer
-            Mandatory for a private key one NIST P curves.
-            It must be in the range ``[1..order-1]``.
-          seed : bytes
-            Mandatory for a private key on Ed25519 (32 bytes),
-            Curve25519 (32 bytes), Curve448 (56 bytes) or Ed448 (57 bytes).
-          point : EccPoint or EccXPoint
-            Mandatory for a public key. If provided for a private key,
-            the implementation will NOT check whether it matches ``d``.
-
-        Only one parameter among ``d``, ``seed`` or ``point`` may be used.
-        """
-
         curve_name = curve
         # Which of these attributes are set depends on the type of key
         self._d: Any = cast(Any, d)
@@ -148,63 +76,8 @@ class EccKey:
         if curve_name is None and self._point:
             curve_name = self._point.curve
 
-        if curve_name not in _curves:
-            raise ValueError("Unsupported curve (%s)" % curve_name)
         self._curve = _curves[curve_name]
         self.curve = self._curve.canonical
-
-        count = int(self._d is not None) + int(self._seed is not None)
-
-        if count == 0:
-            if self._point is None:
-                raise ValueError("At lest one between parameters 'point', 'd' or 'seed' must be specified")
-            return
-
-        if count == 2:
-            raise ValueError("Parameters d and seed are mutually exclusive")
-
-        # NIST P curves work with d, the other curves with a seed
-        seed_len = _SEED_LENGTHS.get(self._curve.id)
-        if seed_len is None:
-            if self._seed is not None:
-                raise ValueError("Parameter 'seed' cannot be used with NIST P-curves")
-            self._d = Integer(self._d)
-            if not 1 <= self._d < self._curve.order:
-                raise ValueError("Parameter d must be an integer smaller than the curve order")
-            return
-
-        if self._d is not None:
-            raise ValueError("Parameter d can only be used with NIST P curves")
-        if len(self._seed) != seed_len:
-            raise ValueError(
-                "Parameter seed must be %d bytes long for %s" % (seed_len, self._curve.canonical)
-            )
-        self._prefix, self._d = _seed_to_scalar(self._curve.id, self._seed)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, EccKey):
-            return False
-
-        if other.has_private() != self.has_private():
-            return False
-
-        return other.pointQ == self.pointQ
-
-    def __repr__(self) -> str:
-        if self.has_private():
-            if self._curve.is_edwards:
-                extra = ", seed=%s" % binascii.hexlify(self._seed).decode("latin-1")
-            else:
-                extra = ", d=%d" % int(self._d)
-        else:
-            extra = ""
-        if self._curve.id in (_CurveID.CURVE25519, _CurveID.CURVE448):
-            x = self.pointQ.x
-            result = "EccKey(curve='%s', point_x=%d%s)" % (self._curve.canonical, x, extra)
-        else:
-            x, y = self.pointQ.xy
-            result = "EccKey(curve='%s', point_x=%d, point_y=%d%s)" % (self._curve.canonical, x, y, extra)
-        return result
 
     def has_private(self) -> bool:
         """``True`` if this key can be used for making signatures or decrypting data."""
@@ -225,25 +98,12 @@ class EccKey:
         s = inv_blind_k * (blind * z + blind_d * r) % order
         return (r, s)
 
-    # ECDSA
-    def _verify(self, z, rs):
-        order = self._curve.order
-        sinv = rs[1].inverse(order)
-        point1 = self._curve.G * ((sinv * z) % order)
-        point2 = self.pointQ * ((sinv * rs[0]) % order)
-        return (point1 + point2)._x % order == rs[0]
 
     @property
     def d(self) -> int:
         if not self.has_private():
             raise ValueError("This is not a private ECC key")
         return int(self._d)
-
-    @property
-    def seed(self) -> bytes:
-        if not self.has_private():
-            raise ValueError("This is not a private ECC key")
-        return self._seed
 
     @property
     def pointQ(self) -> EccPoint:
@@ -298,104 +158,6 @@ class EccKey:
         randfunc: Optional[RNG] = None,
         threads: int = 1,
     ) -> Union[str, bytes]:
-        """Export this ECC key.
-
-        Args:
-          format (string):
-            The output format:
-
-            - ``'DER'``. The key will be encoded in ASN.1 DER format (binary).
-              For a public key, the ASN.1 ``subjectPublicKeyInfo`` structure
-              defined in `RFC5480`_ will be used.
-              For a private key, the ASN.1 ``ECPrivateKey`` structure defined
-              in `RFC5915`_ is used instead (possibly within a PKCS#8 envelope,
-              see the ``use_pkcs8`` flag below).
-            - ``'PEM'``. The key will be encoded in a PEM_ envelope (ASCII).
-            - ``'OpenSSH'``. The key will be encoded in the OpenSSH_ format
-              (ASCII, public keys only).
-            - ``'SEC1'``. The public key (i.e., the EC point) will be encoded
-              into ``bytes`` according to Section 2.3.3 of `SEC1`_
-              (which is a subset of the older X9.62 ITU standard).
-              Only for NIST P-curves.
-            - ``'raw'``. The public key will be encoded as ``bytes``,
-              without any metadata.
-
-              * For NIST P-curves: equivalent to ``'SEC1'``.
-              * For Ed25519 and Ed448: ``bytes`` in the format
-                defined in `RFC8032`_.
-              * For Curve25519 and Curve448: ``bytes`` in the format
-                defined in `RFC7748`_.
-
-          passphrase (bytes or string):
-            (*Private keys only*) The passphrase to protect the
-            private key.
-
-          use_pkcs8 (boolean):
-            (*Private keys only*)
-            If ``True`` (default and recommended), the `PKCS#8`_ representation
-            will be used.
-            It must be ``True`` for Ed25519, Ed448, Curve25519, and Curve448.
-
-            If ``False`` and a passphrase is present, the obsolete PEM
-            encryption will be used. It derives the key with a single round
-            of MD5, and is therefore easy to brute force: use it only with
-            a high-entropy passphrase (like 16 random bytes), for
-            compatibility with old software.
-
-          protection (string):
-            The encryption scheme used when a private key is exported with
-            password-protection and PKCS#8 (both ``DER`` and ``PEM`` formats).
-            For all possible protection schemes,
-            refer to :ref:`the encryption parameters of PKCS#8<enc_params>`.
-            The default is ``'PBKDF2WithHMAC-SHA256AndAES256-CBC'``.
-
-          compress (boolean):
-            If ``True``, the method returns a more compact representation
-            of the public key, with the X-coordinate only.
-
-            If ``False`` (default), the method returns the full public key.
-
-            This parameter is ignored for Ed25519/Ed448/Curve25519/Curve448,
-            as compression is mandatory.
-
-          prot_params (dict):
-            When a private key is exported with password-protection
-            and PKCS#8 (both ``DER`` and ``PEM`` formats), this dictionary
-            contains the  parameters to use to derive the encryption key
-            from the passphrase.
-            For all possible values,
-            refer to :ref:`the encryption parameters of PKCS#8<enc_params>`.
-            The defaults meet the OWASP recommendations (with the default
-            ``protection``): there is no need to set them.
-
-          randfunc (callable):
-            (*Private keys only*)
-            A function that returns random bytes, for the encryption
-            (salt and IV). By default, :func:`Crypto.Random.get_random_bytes`.
-
-          threads (integer):
-            (*Private keys only*)
-            The maximum number of threads used to derive the encryption key
-            with scrypt (default: 1, no extra threads; 0 for all CPU cores).
-            Only useful with PKCS#8, a scrypt ``protection`` and a
-            ``parallelization`` larger than 1 in ``prot_params``.
-            The output does not depend on the number of threads.
-
-        .. warning::
-            If you don't provide a passphrase, the private key will be
-            exported in the clear!
-
-        .. _PEM:        https://www.rfc-editor.org/rfc/rfc1421
-        .. _`PEM encryption`: https://www.rfc-editor.org/rfc/rfc1423
-        .. _OpenSSH:    http://www.openssh.com/txt/rfc5656.txt
-        .. _RFC5480:    https://tools.ietf.org/html/rfc5480
-        .. _SEC1:       https://www.secg.org/sec1-v2.pdf
-        .. _RFC7748:    https://tools.ietf.org/html/rfc7748
-
-        Returns:
-            A multi-line string (for ``'PEM'`` and ``'OpenSSH'``) or
-            ``bytes`` (for ``'DER'``, ``'SEC1'``, and ``'raw'``) with the encoded key.
-        """
 
         ext_format = format
         if ext_format not in ("PEM", "DER", "OpenSSH", "SEC1", "raw"):
@@ -518,8 +280,6 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
     y = Integer.from_bytes(ec_point[modulus_bytes + 1 :])
     return construct(curve=_curve_name, point_x=x, point_y=y)
 
-
-
 def _import_rfc5915_der(
     encoded: bytes, passphrase: Optional[bytes], curve_oid: Optional[str] = None
 ) -> EccKey:
@@ -560,17 +320,8 @@ def _import_pkcs8(encoded, passphrase, max_iteration_count=None, threads=1, max_
 
     return key
 
-
-
-
 def _import_der(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
     return _import_pkcs8(encoded, passphrase, max_iteration_count, threads, max_memory)
-
-def _import_ed25519_public_key(encoded: bytes) -> tuple[Int, Int]: pass
-def _import_curve25519_public_key(encoded): pass
-def _import_curve448_public_key(encoded): pass
-def _import_ed448_public_key(encoded: bytes) -> tuple[Int, Int]: pass
-
 
 def import_key(
     encoded: Union[bytes, str],
