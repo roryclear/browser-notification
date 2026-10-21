@@ -1,11 +1,29 @@
 import sys
 from typing import Any, Literal, Union
 
-from Crypto.Cipher import _create_cipher
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 import cffi
 
+
+def _create_cipher(factory, key, mode, *args, **kwargs):
+    kwargs["key"] = key
+    kwargs.pop("add_aes_modes", False)
+
+    if mode == 1:
+        from Crypto.Cipher._mode_ecb import _create_ecb_cipher
+
+        res = _create_ecb_cipher(factory, **kwargs)
+
+    elif mode == 6:
+        from Crypto.Cipher._mode_ctr import _create_ctr_cipher
+        res = _create_ctr_cipher(factory, **kwargs)
+
+    elif mode == 11:
+        from Crypto.Cipher._mode_gcm import _create_gcm_cipher
+        res = _create_gcm_cipher(factory, **kwargs)
+
+    return res
 
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
