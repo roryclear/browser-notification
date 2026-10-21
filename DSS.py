@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Callable, Optional, Protocol, Union, Any
-from Crypto.Math.Numbers import Integer
+from Crypto.Math._IntegerNat import IntegerNat as Integer
 import operator
 
 def ceil_div(n: int, d: int) -> int:
