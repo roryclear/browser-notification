@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Callable, Optional, Protocol, Union, Any
-from Crypto.Math._IntegerNat import IntegerNat as Integer
+import secrets
 import operator
 
 def ceil_div(n: int, d: int) -> int:
@@ -37,7 +37,7 @@ class DssSigScheme:
         self._order_bytes = (self._order_bits - 1) // 8 + 1
 
     def sign(self, msg_hash: Hash) -> bytes:
-        nonce = self._compute_nonce(msg_hash)
+        nonce = self._compute_nonce()
         z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
         sig_pair = self._key._sign(z, nonce)
         output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
@@ -48,14 +48,11 @@ class FipsEcDsaSigScheme(DssSigScheme):
         self, key: Any, encoding: str, order: Any, randfunc: Optional[Callable[[int], bytes]]
     ) -> None:
         super().__init__(key, encoding, order)
-        self._randfunc = randfunc
+        self._randfunc = None
 
-    def _compute_nonce(self, msg_hash):
-        return Integer.random_range(
-            min_inclusive=1, max_exclusive=self._key._curve.order, randfunc=self._randfunc
-        )
-
-
+    def _compute_nonce(self):
+        n = int(self._key._curve.order)
+        return secrets.randbelow(n - 1) + 1
 
 def new(
     key: Union[Any, Any],
