@@ -13,8 +13,8 @@ from urllib.parse import urlparse
 import SHA256
 import DSS
 import AES
+import ECC
 
-from Crypto.PublicKey import ECC
 from Crypto.Protocol.KDF import HKDF
 
 def num_to_bytes(n, pad_to):
