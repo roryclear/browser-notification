@@ -22,14 +22,31 @@ from __future__ import annotations
 
 from typing import Optional, Union, Any
 
+import cffi
+ffi: Any = cffi.FFI()
+
 
 from Crypto.Util._raw_api import (
     VoidPointer,
     c_uint8_ptr_len,
     create_string_buffer,
-    get_raw_buffer,
     load_pycryptodome_raw_lib,
 )
+
+class _BytesOutput:
+    """A new bytes object that C code writes into (see create_output_buffer)"""
+
+    __slots__ = ("obj", "ptr")
+
+    def __init__(self, obj: bytes, ptr: Any) -> None:
+        self.obj = obj
+        self.ptr = ptr
+
+    def __len__(self) -> int:
+        return len(self.obj)
+
+def get_raw_buffer(buf: Any) -> bytes: return ffi.buffer(buf)[:]
+
 class SmartPointer:
     """Class to hold a non-managed piece of memory"""
 
