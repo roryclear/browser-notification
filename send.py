@@ -98,7 +98,7 @@ def derive_key(salt, private_key, dh, auth_secret):
     receiver_pub = ECC.import_key(dh, curve_name="P-256")
 
     # ECDH: X coordinate of the shared point, encoded to 32 bytes.
-    shared_point = receiver_pub.pointQ * private_key.d
+    shared_point = receiver_pub.pointQ * private_key._d
     secret = int(shared_point.x).to_bytes(32, "big")
 
     sender_pub = private_key.public_key().export_key(format="SEC1")

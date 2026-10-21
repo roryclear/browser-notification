@@ -1,63 +1,30 @@
 from __future__ import annotations
-
-import binascii
 import re
-import struct
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
-    Literal,
     Optional,
     TypedDict,
     Union,
     cast,
-    overload,
 )
 
-from Crypto import IncorrectPassphraseError, KdfLimitError, PassphraseRequiredError
-from Crypto.Hash import SHA512, SHAKE256
 from Crypto.Math.Numbers import Integer
-from Crypto.PublicKey import (
-    _create_subject_public_key_info,
-    _expand_subject_public_key_info,
-    _extract_subject_public_key_info,
-)
 from Crypto.Random import get_random_bytes
 from Crypto.Util._bytes import tobytes
 from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerSequence
-
-from Crypto.PublicKey._point import CurveID as _CurveID
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
-
-if TYPE_CHECKING:
-    from typing_extensions import Unpack
-
-    from Crypto.IO._PBES import ProtParams
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Integer]
 
 
-class _CurveRequired(TypedDict):
+class ConstructParams(TypedDict, total=False):
     curve: str
-
-
-class ConstructParams(_CurveRequired, total=False):
     d: Union[int, Integer]
     seed: bytes
     point_x: Optional[Union[int, Integer]]
     point_y: Optional[Union[int, Integer]]
-
-
-# The curves whose private key is a seed, and its length
-_SEED_LENGTHS = {
-    _CurveID.ED25519: 32,
-    _CurveID.ED448: 57,
-    _CurveID.CURVE25519: 32,
-    _CurveID.CURVE448: 56,
-}
-
 
 class EccKey:
     def __init__(
@@ -79,11 +46,6 @@ class EccKey:
         self._curve = _curves[curve_name]
         self.curve = self._curve.canonical
 
-    def has_private(self) -> bool:
-        """``True`` if this key can be used for making signatures or decrypting data."""
-
-        return self._d is not None
-
     # ECDSA
     def _sign(self, z, k):
         assert 0 < k < self._curve.order
@@ -98,13 +60,6 @@ class EccKey:
         s = inv_blind_k * (blind * z + blind_d * r) % order
         return (r, s)
 
-
-    @property
-    def d(self) -> int:
-        if not self.has_private():
-            raise ValueError("This is not a private ECC key")
-        return int(self._d)
-
     @property
     def pointQ(self) -> EccPoint:
         if self._point is None:
@@ -112,27 +67,9 @@ class EccKey:
         return self._point
 
     def public_key(self) -> EccKey:
-        """A matching ECC public key.
-
-        Returns:
-            a new :class:`EccKey` object
-        """
-
         return EccKey(curve=self._curve.canonical, point=self.pointQ)
 
     def _export_SEC1(self, compress):
-        if not self._curve.is_weierstrass:
-            raise ValueError("SEC1 format is only supported for NIST P curves")
-
-        # See 2.2 in RFC5480 and 2.3.3 in SEC1
-        #
-        # The first byte is:
-        # - 0x02:   compressed, only X-coordinate, Y-coordinate is even
-        # - 0x03:   compressed, only X-coordinate, Y-coordinate is odd
-        # - 0x04:   uncompressed, X-coordinate is followed by Y-coordinate
-        #
-        # PAI is in theory encoded as 0x00.
-
         modulus_bytes = self.pointQ.size_in_bytes()
 
         x, y = self.pointQ._xy
@@ -163,77 +100,33 @@ class EccKey:
         if ext_format not in ("PEM", "DER", "OpenSSH", "SEC1", "raw"):
             raise ValueError("Unknown format '%s'" % ext_format)
 
-        if self.has_private():
-            from Crypto.IO import PKCS8
-
-            PKCS8._check_kdf_params(threads=threads)
-            if passphrase is not None:
-                passphrase = tobytes(passphrase)
-                if not passphrase:
-                    raise ValueError("Empty passphrase")
-            elif protection or prot_params:
-                raise ValueError("'protection' and 'prot_params' require a passphrase")
-
-            if use_pkcs8 is False:
-                if self._curve.is_edwards:
-                    raise ValueError("'pkcs8' must be True for EdDSA curves")
-                if self._curve.is_montgomery:
-                    raise ValueError("'pkcs8' must be True for Curve25519")
-                if protection is not None:
-                    raise ValueError("'protection' is only supported for PKCS#8")
-
-            # The parameters for the encryption with PKCS#8
-            enc_args = {"protection": protection, "prot_params": prot_params, "randfunc": randfunc}
-
-            if ext_format == "PEM":
-                if use_pkcs8:
-                    if passphrase:
-                        return self._export_private_encrypted_pkcs8_in_clear_pem(
-                            passphrase, threads=threads, **enc_args
-                        )
-                    else:
-                        return self._export_private_clear_pkcs8_in_clear_pem()
-                else:
-                    if prot_params is not None:
-                        raise ValueError("'prot_params' is only supported for PKCS#8")
-                    return self._export_private_pem(passphrase, randfunc=randfunc)
-            elif ext_format == "DER":
-                # DER
-                if passphrase and not use_pkcs8:
-                    raise ValueError("Private keys can only be encrypted with DER using PKCS#8")
-                if use_pkcs8:
-                    return self._export_pkcs8(passphrase=passphrase, threads=threads, **enc_args)
-                else:
-                    return self._export_rfc5915_private_der()
+        
+        private_only = {
+            "passphrase": passphrase,
+            "use_pkcs8": None if use_pkcs8 is True else use_pkcs8,
+            "protection": protection,
+            "prot_params": prot_params,
+            "randfunc": randfunc,
+            "threads": None if threads == 1 else threads,
+        }
+        unexpected = {k: v for k, v in private_only.items() if v is not None}
+        if unexpected:
+            raise ValueError("Unexpected parameters: '%s'" % unexpected)
+        if ext_format == "PEM":
+            return self._export_public_pem(compress)
+        elif ext_format == "DER":
+            return self._export_subjectPublicKeyInfo(compress)
+        elif ext_format == "SEC1":
+            return self._export_SEC1(compress)
+        elif ext_format == "raw":
+            if self._curve.is_edwards:
+                return self._export_eddsa_public()
+            elif self._curve.is_montgomery:
+                return self._export_montgomery_public()
             else:
-                raise ValueError("Private keys cannot be exported in the '%s' format" % ext_format)
-        else:  # Public key
-            private_only = {
-                "passphrase": passphrase,
-                "use_pkcs8": None if use_pkcs8 is True else use_pkcs8,
-                "protection": protection,
-                "prot_params": prot_params,
-                "randfunc": randfunc,
-                "threads": None if threads == 1 else threads,
-            }
-            unexpected = {k: v for k, v in private_only.items() if v is not None}
-            if unexpected:
-                raise ValueError("Unexpected parameters: '%s'" % unexpected)
-            if ext_format == "PEM":
-                return self._export_public_pem(compress)
-            elif ext_format == "DER":
-                return self._export_subjectPublicKeyInfo(compress)
-            elif ext_format == "SEC1":
                 return self._export_SEC1(compress)
-            elif ext_format == "raw":
-                if self._curve.is_edwards:
-                    return self._export_eddsa_public()
-                elif self._curve.is_montgomery:
-                    return self._export_montgomery_public()
-                else:
-                    return self._export_SEC1(compress)
-            else:
-                return self._export_openssh(compress)
+        else:
+            return self._export_openssh(compress)
 
 
 def generate(*, curve: str, randfunc: Optional[RNG] = None) -> EccKey:
@@ -250,7 +143,6 @@ def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
     params = cast(dict[str, Any], kwargs)
 
     curve_name = params["curve"]
-    curve = _curves[curve_name]
     point_x = params.pop("point_x", None)
     point_y = params.pop("point_y", None)
 
@@ -258,12 +150,6 @@ def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
         params["point"] = EccPoint(point_x, point_y, curve_name)
     new_key = EccKey(**params)
 
-    # Validate that the private key matches the public one
-    # because EccKey will not do that automatically
-    if new_key.has_private() and "point" in params:
-        pub_key = curve.G * new_key._d
-        if pub_key.xy != (int(point_x), int(point_y)):
-            raise ValueError("Private and public ECC keys do not match")
 
     return new_key
 
@@ -281,13 +167,13 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
     return construct(curve=_curve_name, point_x=x, point_y=y)
 
 def _import_rfc5915_der(
-    encoded: bytes, passphrase: Optional[bytes], curve_oid: Optional[str] = None
+    encoded: bytes, curve_oid: Optional[str] = None
 ) -> EccKey:
     ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
     scalar_bytes = DerOctetString().decode(ec_private_key[1]).payload
     next_element = 2
 
-    for curve_name, curve in _curves.items():  # noqa: B007 (used after the loop)
+    for curve_name, curve in _curves.items():
         if curve.oid == curve_oid:
             break
 
@@ -308,16 +194,8 @@ def _import_pkcs8(encoded, passphrase, max_iteration_count=None, threads=1, max_
     from Crypto.IO import PKCS8
     unwrapped = PKCS8.unwrap(encoded, passphrase, max_iteration_count, threads=threads, max_memory=max_memory)
     _, private_key, params = unwrapped
-    # The optional publicKey of a OneAsymmetricKey (RFC 5958),
-    # which must match the private key
-    public_key = unwrapped.public_key
-
     curve_oid = DerObjectId().decode(params).value
-    key = _import_rfc5915_der(private_key, passphrase, curve_oid)
-    if public_key is not None:
-        # ECPoint (RFC 5480), as in the subjectPublicKeyInfo
-        point = _import_public_der(public_key, curve_oid=curve_oid).pointQ
-
+    key = _import_rfc5915_der(private_key, curve_oid)
     return key
 
 def _import_der(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
