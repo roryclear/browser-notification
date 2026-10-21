@@ -21,6 +21,8 @@
 from __future__ import annotations
 
 from typing import Optional, Union, Any
+import os
+import threading
 
 import cffi
 ffi: Any = cffi.FFI()
@@ -32,18 +34,58 @@ from Crypto.Util._raw_api import (
     create_string_buffer,
     load_pycryptodome_raw_lib,
 )
+from Crypto.Util._file_system import pycryptodome_filename
 
-class _BytesOutput:
-    """A new bytes object that C code writes into (see create_output_buffer)"""
+from importlib import machinery
+extension_suffixes = machinery.EXTENSION_SUFFIXES
 
-    __slots__ = ("obj", "ptr")
+_declared: set = set()
+_declared_lock = threading.Lock()
+def load_lib(name: str, cdecl: str) -> Any:
+    """Load a shared library and return a handle to it.
 
-    def __init__(self, obj: bytes, ptr: Any) -> None:
-        self.obj = obj
-        self.ptr = ptr
+    @name,  either an absolute path or the name of a library
+            in the system search path.
 
-    def __len__(self) -> int:
-        return len(self.obj)
+    @cdecl, the C function declarations.
+    """
+
+    if hasattr(ffi, "RTLD_DEEPBIND") and not os.getenv("PYCRYPTODOME_DISABLE_DEEPBIND"):
+        lib = ffi.dlopen(name, ffi.RTLD_DEEPBIND)
+    else:
+        lib = ffi.dlopen(name)
+    # Several libraries can export the same functions (for instance,
+    # a portable and an optimized build of the same code), but
+    # cffi rejects a second declaration of a function.
+    with _declared_lock:
+        if cdecl not in _declared:
+            ffi.cdef(cdecl)
+            _declared.add(cdecl)
+    return lib
+
+def load_pycryptodome_raw_lib(name: str, cdecl: str) -> Any:
+    """Load a shared library and return a handle to it.
+
+    @name,  the name of the library expressed as a PyCryptodome module,
+            for instance Crypto.Cipher._raw_cbc.
+
+    @cdecl, the C function declarations.
+    """
+
+    split = name.split(".")
+    dir_comps, basename = split[:-1], split[-1]
+    attempts = []
+    for ext in extension_suffixes:
+        try:
+            filename = basename + ext
+            full_name = pycryptodome_filename(dir_comps, filename)
+            if not os.path.isfile(full_name):
+                attempts.append("Not found '%s'" % filename)
+                continue
+            return load_lib(full_name, cdecl)
+        except OSError as exp:
+            attempts.append("Cannot load '%s': %s" % (filename, str(exp)))
+    raise OSError("Cannot load native module '%s': %s" % (name, ", ".join(attempts)))
 
 def get_raw_buffer(buf: Any) -> bytes: return ffi.buffer(buf)[:]
 
