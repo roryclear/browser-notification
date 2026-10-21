@@ -10,8 +10,9 @@ import requests
 from typing import cast
 from urllib.parse import urlparse
 
+import SHA256
+
 from Crypto.PublicKey import ECC
-from Crypto.Hash import SHA256
 from Crypto.Signature import DSS
 from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import AES
