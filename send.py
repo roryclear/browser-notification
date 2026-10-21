@@ -33,7 +33,10 @@ def sign(claims, key):
     token = "{}.{}".format(header, claims)
 
     signer = DSS.new(key, "fips-186-3", encoding="binary")
-    signature = signer.sign(SHA256.new(token.encode("utf8")))
+
+    # todo patch throw in lib
+    import hashlib
+    signature = signer.sign(hashlib.sha256(token.encode("utf8")))
 
     return "{}.{}".format(token, b64urlencode(signature))
 
