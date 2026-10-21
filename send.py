@@ -12,10 +12,10 @@ from urllib.parse import urlparse
 
 import SHA256
 import DSS
+import AES
 
 from Crypto.PublicKey import ECC
 from Crypto.Protocol.KDF import HKDF
-from Crypto.Cipher import AES
 
 def num_to_bytes(n, pad_to):
     h = "%x" % n
@@ -134,7 +134,6 @@ def derive_key(salt, private_key, dh, auth_secret):
 
 def encrypt(content, private_key=None, dh=None, auth_secret=None):
     rs = 4096
-
     def encrypt_record(key, nonce, counter, buf):
         cipher = AES.new(
             key,
