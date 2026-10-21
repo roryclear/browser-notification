@@ -20,16 +20,38 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Union, Any
+
 
 from Crypto.Util._raw_api import (
-    SmartPointer,
     VoidPointer,
     c_uint8_ptr_len,
     create_string_buffer,
     get_raw_buffer,
     load_pycryptodome_raw_lib,
 )
+class SmartPointer:
+    """Class to hold a non-managed piece of memory"""
+
+    def __init__(self, raw_pointer: Any, destructor: Any) -> None:
+        self._raw_pointer = raw_pointer
+        self._destructor = destructor
+
+    def get(self) -> Any:
+        return self._raw_pointer
+
+    def release(self) -> Any:
+        rp, self._raw_pointer = self._raw_pointer, None
+        return rp
+
+    def __del__(self):
+        try:
+            if self._raw_pointer is not None:
+                self._destructor(self._raw_pointer)
+                self._raw_pointer = None
+        except AttributeError:
+            pass
+
 
 _sha256_cdecl = """
                         int SHA256_init(void **shaState);
