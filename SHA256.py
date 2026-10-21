@@ -28,8 +28,6 @@ import abc
 import cffi
 ffi: Any = cffi.FFI()
 
-
-from Crypto.Util._raw_api import c_uint8_ptr_len
 from Crypto.Util._file_system import pycryptodome_filename
 
 from importlib import machinery
@@ -185,7 +183,7 @@ class SHA256Hash:
         if data: self.update(data)
 
     def update(self, data: Union[bytes, bytearray, memoryview]) -> None:
-        data_ptr, data_len = c_uint8_ptr_len(data)
+        data_ptr, data_len = data, len(data)
         _raw_sha256_lib.SHA256_update(self._state.get(), data_ptr, data_len)
 
     def digest(self) -> bytes:
