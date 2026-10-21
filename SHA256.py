@@ -25,7 +25,6 @@ from typing import Optional, Union
 from Crypto.Util._raw_api import (
     SmartPointer,
     VoidPointer,
-    c_size_t,
     c_uint8_ptr_len,
     create_string_buffer,
     get_raw_buffer,
@@ -73,11 +72,11 @@ class SHA256Hash:
 
     def update(self, data: Union[bytes, bytearray, memoryview]) -> None:
         data_ptr, data_len = c_uint8_ptr_len(data)
-        _raw_sha256_lib.SHA256_update(self._state.get(), data_ptr, c_size_t(data_len))
+        _raw_sha256_lib.SHA256_update(self._state.get(), data_ptr, data_len)
 
     def digest(self) -> bytes:
         bfr = create_string_buffer(self.digest_size)
-        _raw_sha256_lib.SHA256_digest(self._state.get(), bfr, c_size_t(self.digest_size))
+        _raw_sha256_lib.SHA256_digest(self._state.get(), bfr, self.digest_size)
         return get_raw_buffer(bfr)
 
     def copy(self) -> SHA256Hash:
