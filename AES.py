@@ -3,9 +3,41 @@ from typing import Any, Literal, Union
 
 from Crypto.Cipher import _create_cipher
 from Crypto.Util._raw_api import (
-    VoidPointer,
     load_pycryptodome_raw_lib,
 )
+import abc
+import cffi
+
+ffi: Any = cffi.FFI()
+null_pointer: Any = ffi.NULL
+
+class _VoidPointer:
+    @abc.abstractmethod
+    def get(self) -> Any:
+        """Return the memory location we point to"""
+        return
+
+    @abc.abstractmethod
+    def address_of(self) -> Any:
+        """Return a raw pointer to this pointer"""
+        return
+
+class VoidPointer_cffi(_VoidPointer):
+    """Model a newly allocated pointer to void"""
+
+    def __init__(self):
+        self._pp = ffi.new("void *[1]")
+
+    def get(self):
+        return self._pp[0]
+
+    def address_of(self):
+        return self._pp
+
+def VoidPointer() -> _VoidPointer:
+    return VoidPointer_cffi()
+
+backend: str = "cffi"
 
 class SmartPointer:
     def __init__(self, raw_pointer: Any, destructor: Any) -> None:
@@ -38,7 +70,6 @@ _cproto = """
 
 # Load portable AES
 _raw_aes_lib = load_pycryptodome_raw_lib("Crypto.Cipher._raw_aes", _cproto)
-
 
 def _create_base_cipher(dict_parameters):
     key = dict_parameters.pop("key")
