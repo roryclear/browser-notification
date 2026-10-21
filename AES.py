@@ -3,13 +3,18 @@ from typing import Any, Literal, Union
 
 from Crypto.Cipher import _create_cipher
 from Crypto.Util._raw_api import (
-    SmartPointer,
     VoidPointer,
-    c_size_t,
     c_uint8_ptr_len,
     load_pycryptodome_raw_lib,
 )
 
+class SmartPointer:
+    def __init__(self, raw_pointer: Any, destructor: Any) -> None:
+        self._raw_pointer = raw_pointer
+        self._destructor = destructor
+
+    def get(self) -> Any: return self._raw_pointer
+    def release(self) -> Any: pass
 
 Buffer = Union[bytes, bytearray, memoryview]
 
@@ -32,7 +37,6 @@ _cproto = """
         int AES_stop_operation(void *state);
         """
 
-
 # Load portable AES
 _raw_aes_lib = load_pycryptodome_raw_lib("Crypto.Cipher._raw_aes", _cproto)
 
@@ -44,15 +48,12 @@ def _create_base_cipher(dict_parameters):
 
     cipher = VoidPointer()
     key_ptr, key_len = c_uint8_ptr_len(key)
-    start_operation(key_ptr, c_size_t(key_len), cipher.address_of())
+    start_operation(key_ptr, key_len, cipher.address_of())
     return SmartPointer(cipher.get(), stop_operation)
-
-
 
 def new(key: Buffer, mode: int, *args: Any, **kwargs: Any) -> Any:
     kwargs["add_aes_modes"] = True
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
-
 
 # Size of a data block (in bytes)
 block_size: int = 16
