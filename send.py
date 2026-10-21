@@ -11,9 +11,9 @@ from typing import cast
 from urllib.parse import urlparse
 
 import SHA256
+import DSS
 
 from Crypto.PublicKey import ECC
-from Crypto.Signature import DSS
 from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import AES
 
