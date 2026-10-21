@@ -4,7 +4,6 @@ from typing import Any, Literal, Union
 from Crypto.Cipher import _create_cipher
 from Crypto.Util._raw_api import (
     VoidPointer,
-    c_uint8_ptr_len,
     load_pycryptodome_raw_lib,
 )
 
@@ -47,7 +46,7 @@ def _create_base_cipher(dict_parameters):
     stop_operation = _raw_aes_lib.AES_stop_operation
 
     cipher = VoidPointer()
-    key_ptr, key_len = c_uint8_ptr_len(key)
+    key_ptr, key_len = key, len(key)
     start_operation(key_ptr, key_len, cipher.address_of())
     return SmartPointer(cipher.get(), stop_operation)
 
