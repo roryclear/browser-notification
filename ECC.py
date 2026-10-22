@@ -13,7 +13,7 @@ import cffi
 
 from Crypto.Math.Numbers import Integer
 
-from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar
+from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase
 
 def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
 
@@ -22,6 +22,19 @@ def ceil_div(n: int, d: int) -> int:
     if (n != 0) and (q != 0): r += 1
     return r
 
+def _encode_scalar(scalar: Union[int, IntegerBase], min_length: int) -> bytes: return long_to_bytes(scalar)
+
+def _copy_point(point):
+    copy = point.__class__.__new__(point.__class__)
+    copy._curve = point._curve
+    copy.curve = point.curve
+    copy._point = _clone_raw_point(point._curve, point)
+    return copy
+
+def _clone_raw_point(curve, point) -> SmartPointer:
+    raw_point = VoidPointer()
+    curve.rawlib.clone(raw_point.address_of(), point._point.get())
+    return SmartPointer(raw_point.get(), curve.rawlib.free_point)
 
 class StrongRandom:
     def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
