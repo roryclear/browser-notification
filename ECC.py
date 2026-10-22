@@ -11,7 +11,6 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util.asn1 import DerBitString
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
@@ -111,11 +110,23 @@ class DerObjectId(DerObject):
 
         self.value = ".".join([str(x) for x in subcomps])
 
-class DerOctetString(DerObject):
-    def __init__(self, value: bytes = b"", implicit: Optional[Union[int, bytes]] = None) -> None:
-        DerObject.__init__(self, 0x04, value, implicit, False)
+    def _convertTag(self, tag: Union[int, bytes]) -> int:
+        """Check if *tag* is a real DER tag (5 bits).
+        Convert it from a character to number if necessary.
+        """
+        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1:
+            tag = tag[0]
+        # Ensure that tag is a low tag
+        if not (isinstance(tag, int) and 0 <= tag < 0x1F):
+            raise ValueError("Wrong DER tag")
+        return tag
 
 class DerObject:
+    """Base class for defining a single DER object.
+
+    This class should never be directly instantiated.
+    """
+
     def __init__(
         self,
         asn1Id: Optional[Union[int, bytes]] = None,
@@ -124,18 +135,149 @@ class DerObject:
         constructed: bool = False,
         explicit: Optional[Union[int, bytes]] = None,
     ) -> None:
-        self._tag_octet = None
-        return
+        """Initialize the DER object according to a specific ASN.1 type.
 
-    def _convertTag(self, tag: Union[int, bytes]) -> int: return tag
+        :Parameters:
+          asn1Id : integer or byte
+            The universal DER tag number for this object
+            (e.g. 0x10 for a SEQUENCE).
+            If None, the tag is not known yet.
+
+          payload : byte string
+            The initial payload of the object (that it,
+            the content octets).
+            If not specified, the payload is empty.
+
+          implicit : integer or byte
+            The IMPLICIT tag number (< 0x1F) to use for the encoded object.
+            It overrides the universal tag *asn1Id*.
+            It cannot be combined with the ``explicit`` parameter.
+            By default, there is no IMPLICIT tag.
+
+          constructed : bool
+            True when the ASN.1 type is *constructed*.
+            False when it is *primitive* (default).
+
+          explicit : integer or byte
+            The EXPLICIT tag number (< 0x1F) to use for the encoded object.
+            It cannot be combined with the ``implicit`` parameter.
+            By default, there is no EXPLICIT tag.
+        """
+
+        self._tag_octet: Optional[int]
+        if asn1Id is None:
+            # The tag octet will be read in with ``decode``
+            self._tag_octet = None
+            return
+        asn1Id = self._convertTag(asn1Id)
+
+        self.payload = payload
+
+        # In a BER/DER identifier octet:
+        # * bits 4-0 contain the tag value
+        # * bit 5 is set if the type is 'constructed'
+        #   and unset if 'primitive'
+        # * bits 7-6 depend on the encoding class
+        #
+        # Class        | Bit 7, Bit 6
+        # ----------------------------------
+        # universal    |   0      0
+        # application  |   0      1
+        # context-spec |   1      0 (default for IMPLICIT/EXPLICIT)
+        # private      |   1      1
+        #
+
+        constructed_bit = 0x20 if constructed else 0x00
+
+        if None not in (explicit, implicit):
+            raise ValueError("Explicit and implicit tags are mutually exclusive")
+
+        if implicit is not None:
+            # IMPLICIT tag overrides asn1Id
+            self._tag_octet = 0x80 | constructed_bit | self._convertTag(implicit)
+        elif explicit is not None:
+            # 'constructed bit' is always asserted for an EXPLICIT tag
+            self._tag_octet = 0x80 | 0x20 | self._convertTag(explicit)
+            self._inner_tag_octet = constructed_bit | asn1Id
+        else:
+            # Neither IMPLICIT nor EXPLICIT
+            self._tag_octet = constructed_bit | asn1Id
+
+    def _convertTag(self, tag: Union[int, bytes]) -> int:
+        """Check if *tag* is a real DER tag (5 bits).
+        Convert it from a character to number if necessary.
+        """
+        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1:
+            tag = tag[0]
+        # Ensure that tag is a low tag
+        if not (isinstance(tag, int) and 0 <= tag < 0x1F):
+            raise ValueError("Wrong DER tag")
+        return tag
+
+    @staticmethod
+    def _definite_form(length: int) -> bytes:
+        """Build length octets according to BER/DER
+        definite form.
+        """
+        if length > 127:
+            encoding = long_to_bytes(length)
+            return bytes([len(encoding) + 128]) + encoding
+        return bytes([length])
+
+    def encode(self) -> bytes:
+        """Return this DER element, fully encoded as a binary byte string."""
+
+        # Concatenate identifier octets, length octets,
+        # and contents octets
+
+        output_payload = self.payload
+
+        # In case of an EXTERNAL tag, first encode the inner
+        # element.
+        if hasattr(self, "_inner_tag_octet"):
+            output_payload = (
+                bytes([self._inner_tag_octet]) + self._definite_form(len(self.payload)) + self.payload
+            )
+
+        assert self._tag_octet is not None
+        return bytes([self._tag_octet]) + self._definite_form(len(output_payload)) + output_payload
 
     def _decodeLen(self, s: BytesIO_EOF) -> int:
+        """Decode DER length octets from a file."""
+
         length = s.read_byte()
+
+        if length > 127:
+            encoded_length = s.read(length & 0x7F)
+            if encoded_length[0] == 0:
+                raise ValueError("Invalid DER: length has leading zero")
+            length = bytes_to_long(encoded_length)
+            if length <= 127:
+                raise ValueError("Invalid DER: length in long form but smaller than 128")
+
         return length
 
     def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+        """Decode a complete DER element, and re-initializes this
+        object with it.
+
+        Args:
+          der_encoded (byte string): A complete DER element.
+
+        Raises:
+          ValueError: in case of parsing errors.
+        """
+
+        if not isinstance(der_encoded, bytes):
+            raise ValueError("Input is not a byte string")
+
         s = BytesIO_EOF(der_encoded)
         self._decodeFromStream(s, strict)
+
+        # There shouldn't be other bytes left
+        if s.remaining_data() > 0:
+            raise ValueError("Unexpected extra data after the DER structure")
+
         return self
 
     def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
@@ -163,6 +305,106 @@ class DerObject:
             # There shouldn't be other bytes left
             if p.remaining_data() > 0:
                 raise ValueError("Unexpected extra data after the DER structure")
+
+
+class DerOctetString(DerObject):
+    def __init__(self, value: bytes = b"", implicit: Optional[Union[int, bytes]] = None) -> None:
+        DerObject.__init__(self, 0x04, value, implicit, False)
+
+class DerBitString(DerObject):
+    """Class to model a DER BIT STRING.
+
+    An example of encoding is:
+
+    >>> from Crypto.Util.asn1 import DerBitString
+    >>> bs_der = DerBitString(b'\\xAA')
+    >>> bs_der.value += b'\\xBB'
+    >>> print(bs_der.encode().hex())
+
+    which will show ``030300aabb``, the DER encoding for the bit string
+    ``b'\\xAA\\xBB'``.
+
+    For decoding:
+
+    >>> s = bytes.fromhex('030300aabb')
+    >>> try:
+    >>>   bs_der = DerBitString()
+    >>>   bs_der.decode(s)
+    >>>   print(bs_der.value.hex())
+    >>> except ValueError:
+    >>>   print "Not a valid DER BIT STRING"
+
+    the output will be ``aabb``.
+
+    :ivar value: The content of the string
+    :vartype value: byte string
+    """
+
+    def __init__(
+        self,
+        value: Union[bytes, DerObject] = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        """Initialize the DER object as a BIT STRING.
+
+        :Parameters:
+          value : byte string or DER object
+            The initial, packed bit string.
+            If not specified, the bit string is empty.
+          implicit : integer
+            The IMPLICIT tag to use for the encoded object.
+            It overrides the universal tag for BIT STRING (3).
+          explicit : integer
+            The EXPLICIT tag to use for the encoded object.
+        """
+        DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
+
+        # The bitstring value (packed)
+        self.value: bytes
+        if isinstance(value, DerObject):
+            self.value = value.encode()
+        else:
+            self.value = value
+
+    def encode(self) -> bytes:
+        """Return the DER BIT STRING, fully encoded as a
+        byte string."""
+
+        # Add padding count byte
+        self.payload = b"\x00" + self.value
+        return DerObject.encode(self)
+
+    def decode(self, der_encoded: bytes, strict: bool = False) -> DerBitString:
+        """Decode a complete DER BIT STRING, and re-initializes this
+        object with it.
+
+        Args:
+            der_encoded (byte string): a complete DER BIT STRING.
+            strict (boolean):
+                Whether decoding must check for strict DER compliancy.
+
+        Raises:
+            ValueError: in case of parsing errors.
+        """
+
+        return DerObject.decode(self, der_encoded, strict)
+
+    def _decodeFromStream(self, s, strict):
+        """Decode a complete DER BIT STRING DER from a file."""
+
+        # Fill-up self.payload
+        DerObject._decodeFromStream(self, s, strict)
+
+        if self.payload and self.payload[0] != 0:
+            raise ValueError("Not a valid BIT STRING")
+
+        # Fill-up self.value
+        self.value = b""
+        # Remove padding count byte
+        if self.payload:
+            self.value = self.payload[1:]
+
 
 class DerSequence(DerObject):
     def __init__(
