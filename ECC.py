@@ -8,29 +8,29 @@ from typing import (
     Union,
     cast,
 )
-import random
+import random, secrets
 
 from Crypto.Math.Numbers import Integer
 from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerSequence
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
-Int = Union[int, Integer]
+Int = Union[int, Any]
 
 
 class ConstructParams(TypedDict, total=False):
     curve: str
-    d: Union[int, Integer]
+    d: Union[int, Any]
     seed: bytes
-    point_x: Optional[Union[int, Integer]]
-    point_y: Optional[Union[int, Integer]]
+    point_x: Optional[Union[int, Any]]
+    point_y: Optional[Union[int, Any]]
 
 class EccKey:
     def __init__(
         self,
         *,
         curve: Optional[str] = None,
-        d: Optional[Union[int, Integer]] = None,
+        d: Optional[Union[int, Any]] = None,
         seed: Optional[bytes] = None,
         point: Optional[Union[EccPoint, EccXPoint]] = None,
     ) -> None:
