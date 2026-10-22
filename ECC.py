@@ -154,8 +154,8 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
             break
 
     modulus_bytes = curve.p.size_in_bytes()
-    x = Integer.from_bytes(ec_point[1 : modulus_bytes + 1])
-    y = Integer.from_bytes(ec_point[modulus_bytes + 1 :])
+    x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
+    y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
     return construct(curve=_curve_name, point_x=x, point_y=y)
 
 def _import_rfc5915_der(
@@ -178,7 +178,7 @@ def _import_rfc5915_der(
         point_y = public_key.pointQ.y
         next_element += 1
 
-    d = Integer.from_bytes(scalar_bytes)
+    d = int.from_bytes(scalar_bytes, byteorder="big")
     return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
 
 
