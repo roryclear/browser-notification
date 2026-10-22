@@ -11,7 +11,7 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString
+from Crypto.Util.asn1 import DerBitString
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
@@ -41,6 +41,79 @@ class BytesIO_EOF:
 
     def read_byte(self) -> int:
         return self.read(1)[0]
+
+class DerObject:
+    def __init__(
+        self,
+        asn1Id: Optional[Union[int, bytes]] = None,
+        payload: bytes = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        constructed: bool = False,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        self._tag_octet: Optional[int]
+        # The tag octet will be read in with ``decode``
+        self._tag_octet = None
+        return
+
+    def _decodeLen(self, s: BytesIO_EOF) -> int:
+        length = s.read_byte()
+        return length
+
+    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s, strict)
+        return self
+
+    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+        idOctet = s.read_byte()
+        self._tag_octet = idOctet
+        length = self._decodeLen(s)
+        self.payload = s.read(length)
+
+
+class DerObjectId(DerObject):
+    def __init__(
+        self,
+        value: str = "",
+        implicit: Optional[Union[int, bytes]] = None,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        DerObject.__init__(self, 0x06, b"", implicit, False, explicit)
+        self.value = value
+
+    def decode(self, der_encoded: bytes, strict: bool = False) -> DerObjectId: return DerObject.decode(self, der_encoded, strict)
+
+    def _decodeFromStream(self, s, strict):
+        DerObject._decodeFromStream(self, s, strict)
+
+        # Derive self.value from self.payload
+        p = BytesIO_EOF(self.payload)
+
+        subcomps = []
+        v = 0
+        while p.remaining_data():
+            c = p.read_byte()
+            v = (v << 7) + (c & 0x7F)
+            if not (c & 0x80):
+                subcomps.append(v)
+                v = 0
+
+        if len(subcomps) == 0:
+            raise ValueError("Empty payload")
+
+        if subcomps[0] < 40:
+            subcomps[:1] = [0, subcomps[0]]
+        elif subcomps[0] < 80:
+            subcomps[:1] = [1, subcomps[0] - 40]
+        else:
+            subcomps[:1] = [2, subcomps[0] - 80]
+
+        self.value = ".".join([str(x) for x in subcomps])
+
+class DerOctetString(DerObject):
+    def __init__(self, value: bytes = b"", implicit: Optional[Union[int, bytes]] = None) -> None:
+        DerObject.__init__(self, 0x04, value, implicit, False)
 
 class DerObject:
     def __init__(
