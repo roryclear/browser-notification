@@ -43,7 +43,7 @@ RNG = Callable[[int], bytes]
 Int = Union[int, Any]
 
 class EccPoint:
-    def __init__(self, x: Union[int, Integer], y: Union[int, Integer], curve: Optional[str] = "p256") -> None:
+    def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
         self._curve = _curves[curve]
         self.curve = self._curve.canonical
 
@@ -80,19 +80,16 @@ class EccPoint:
         xb, yb = self._get_xy_bytes()
         return (bytes_to_long(xb), bytes_to_long(yb))
 
-    # The coordinates as Integer objects, for the library itself.
-    # The conversion is constant time (the point may be secret, as in ECDH).
-
     @property
-    def _x(self) -> Integer:
+    def _x(self):
         return self._xy[0]
 
     @property
-    def _y(self) -> Integer:
+    def _y(self):
         return self._xy[1]
 
     @property
-    def _xy(self) -> tuple[Integer, Integer]:
+    def _xy(self):
         xb, yb = self._get_xy_bytes()
         return (Integer.from_bytes(xb), Integer.from_bytes(yb))
 
@@ -118,14 +115,6 @@ class EccPoint:
 
 
     def __imul__(self, scalar: int) -> EccPoint:
-        """Multiply this point by a scalar.
-
-        The scalar is treated as secret, unless it is an Integer created as public.
-        """
-
-        if scalar < 0:
-            raise ValueError("Scalar multiplication is only defined for non-negative integers")
-
         # A public scalar: no blinding, and only as many bits as needed
         public_func = getattr(self._curve.rawlib, "scalar_public", None)
         if public_func is not None and isinstance(scalar, IntegerBase) and scalar._public:
