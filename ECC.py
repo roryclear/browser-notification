@@ -13,9 +13,30 @@ import cffi
 
 from Crypto.Math.Numbers import Integer
 
-from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar, getrandbits
+from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar
 
 def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
+
+def ceil_div(n: int, d: int) -> int:
+    r, q = divmod(n, d)
+    if (n != 0) and (q != 0): r += 1
+    return r
+
+
+class StrongRandom:
+    def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
+        if randfunc is None and rng is None:
+            self._randfunc = None
+        elif randfunc is not None and rng is None:
+            self._randfunc = randfunc
+        elif randfunc is None and rng is not None:
+            self._randfunc = rng.read
+        else:
+            raise ValueError("Cannot specify both 'rng' and 'randfunc'")
+
+    def getrandbits(self, k: int) -> int:
+        mask = (1 << k) - 1
+        return mask & bytes_to_long(secrets.token_bytes(ceil_div(k, 8)))
 
 class c_uint8_ptr_out:
     def __init__(self, data: Any) -> None:
@@ -125,7 +146,7 @@ class EccPoint:
             sb = _encode_scalar(scalar, self.size_in_bytes())
             sb_ptr, sb_len = sb, len(sb)
             result = self._curve.rawlib.scalar(
-                self._point.get(), sb_ptr, sb_len, getrandbits(64)
+                self._point.get(), sb_ptr, sb_len, StrongRandom().getrandbits(64)
             )
         if result:
             raise ValueError("Error %d during scalar multiplication" % result)
