@@ -11,7 +11,6 @@ from typing import (
 import random
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util._bytes import tobytes
 from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerSequence
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
@@ -204,7 +203,6 @@ def import_key(
     max_memory: Optional[int] = None,
 ) -> EccKey:
     from Crypto.IO import PEM
-    encoded = tobytes(encoded)
 
     if encoded.startswith(b"-----"):
         text_encoded = encoded.decode("latin-1")
