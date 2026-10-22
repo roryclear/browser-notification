@@ -95,12 +95,7 @@ class EccKey:
         randfunc: Optional[RNG] = None,
         threads: int = 1,
     ) -> Union[str, bytes]:
-
         ext_format = format
-        if ext_format not in ("PEM", "DER", "OpenSSH", "SEC1", "raw"):
-            raise ValueError("Unknown format '%s'" % ext_format)
-
-        
         private_only = {
             "passphrase": passphrase,
             "use_pkcs8": None if use_pkcs8 is True else use_pkcs8,
@@ -149,7 +144,6 @@ def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
     if None not in (point_x, point_y):
         params["point"] = EccPoint(point_x, point_y, curve_name)
     new_key = EccKey(**params)
-
 
     return new_key
 
@@ -210,9 +204,7 @@ def import_key(
     threads: int = 1,
     max_memory: Optional[int] = None,
 ) -> EccKey:
-    from Crypto.IO import PEM, PKCS8
-
-    PKCS8._check_kdf_params(max_iteration_count, threads, max_memory)
+    from Crypto.IO import PEM
     encoded = tobytes(encoded)
 
     if encoded.startswith(b"-----"):
@@ -220,10 +212,8 @@ def import_key(
         ecparams_start = "-----BEGIN EC PARAMETERS-----"
         ecparams_end = "-----END EC PARAMETERS-----"
         text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
-
-        der_encoded, _marker, enc_flag = PEM.decode(text_encoded, passphrase)
-        if enc_flag:
-            passphrase = None
+        
+        der_encoded, _, _ = PEM.decode(text_encoded, passphrase)
         result = _import_der(der_encoded, passphrase, max_iteration_count, threads, max_memory)
         return result
 
