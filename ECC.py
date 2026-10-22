@@ -601,7 +601,7 @@ def _import_rfc5915_der(
 
 
 def _import_pkcs8(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
-    from Crypto.IO import PKCS8
+    import PKCS8
     unwrapped = PKCS8.unwrap(encoded, passphrase, max_iteration_count, threads=threads, max_memory=max_memory)
     _, private_key, params = unwrapped
     curve_oid = DerObjectId().decode(params).value
