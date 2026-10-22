@@ -11,10 +11,129 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.PublicKey._point import EccPoint, _curves
+
+from Crypto.Util._raw_api import (
+    SmartPointer,
+    VoidPointer,
+    c_size_t,
+    c_uint8_ptr,
+    c_uint8_ptr_len,
+    c_uint8_ptr_out,
+    c_ulonglong,
+)
+
+from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar, getrandbits
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Any]
+
+class EccPoint:
+    def __init__(self, x: Union[int, Integer], y: Union[int, Integer], curve: Optional[str] = "p256") -> None:
+        self._curve = _curves[curve]
+        self.curve = self._curve.canonical
+
+
+        modulus_bytes = self.size_in_bytes()
+
+        xb = _encode_coordinate(x, modulus_bytes)
+        yb = _encode_coordinate(y, modulus_bytes)
+        if self._curve.id in _nist_curve_ids:
+            p = int(self._curve.p)
+            xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
+            yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
+
+        new_point = self._curve.rawlib.new_point
+        free_func = self._curve.rawlib.free_point
+
+        raw_point = VoidPointer()
+        context = _curve_context(self._curve)
+        new_point(raw_point.address_of(), c_uint8_ptr(xb), c_uint8_ptr(yb), c_size_t(modulus_bytes), context)
+        self._point = SmartPointer(raw_point.get(), free_func)
+
+    def copy(self) -> EccPoint:return _copy_point(self)
+
+    @property
+    def x(self) -> int:
+        return self.xy[0]
+
+    @property
+    def y(self) -> int:
+        return self.xy[1]
+
+    @property
+    def xy(self) -> tuple[int, int]:
+        xb, yb = self._get_xy_bytes()
+        return (bytes_to_long(xb), bytes_to_long(yb))
+
+    # The coordinates as Integer objects, for the library itself.
+    # The conversion is constant time (the point may be secret, as in ECDH).
+
+    @property
+    def _x(self) -> Integer:
+        return self._xy[0]
+
+    @property
+    def _y(self) -> Integer:
+        return self._xy[1]
+
+    @property
+    def _xy(self) -> tuple[Integer, Integer]:
+        xb, yb = self._get_xy_bytes()
+        return (Integer.from_bytes(xb), Integer.from_bytes(yb))
+
+    def _get_xy_bytes(self) -> tuple[bytearray, bytearray]:
+        modulus_bytes = self.size_in_bytes()
+        xb = bytearray(modulus_bytes)
+        yb = bytearray(modulus_bytes)
+        get_xy = self._curve.rawlib.get_xy
+        with c_uint8_ptr_out(xb) as xb_ptr, c_uint8_ptr_out(yb) as yb_ptr:
+            result = get_xy(xb_ptr, yb_ptr, c_size_t(modulus_bytes), self._point.get())
+        if result:
+            raise ValueError("Error %d while encoding an EC point" % result)
+        return xb, yb
+
+    def size_in_bytes(self) -> int:
+        """Size of each coordinate, in bytes."""
+        return (self.size_in_bits() + 7) // 8
+
+    def size_in_bits(self) -> int:
+        """Size of each coordinate, in bits."""
+        return self._curve.modulus_bits
+
+
+
+    def __imul__(self, scalar: int) -> EccPoint:
+        """Multiply this point by a scalar.
+
+        The scalar is treated as secret, unless it is an Integer created as public.
+        """
+
+        if scalar < 0:
+            raise ValueError("Scalar multiplication is only defined for non-negative integers")
+
+        # A public scalar: no blinding, and only as many bits as needed
+        public_func = getattr(self._curve.rawlib, "scalar_public", None)
+        if public_func is not None and isinstance(scalar, IntegerBase) and scalar._public:
+            sb = scalar.to_bytes()
+            sb_ptr, sb_len = c_uint8_ptr_len(sb)
+            result = public_func(self._point.get(), sb_ptr, c_size_t(sb_len))
+        else:
+            sb = _encode_scalar(scalar, self.size_in_bytes())
+            sb_ptr, sb_len = c_uint8_ptr_len(sb)
+            result = self._curve.rawlib.scalar(
+                self._point.get(), sb_ptr, c_size_t(sb_len), c_ulonglong(getrandbits(64))
+            )
+        if result:
+            raise ValueError("Error %d during scalar multiplication" % result)
+        return self
+
+    def __mul__(self, scalar: int) -> EccPoint:
+        """Return a new point, the scalar product of this one"""
+
+        np = self.copy()
+        np *= scalar
+        return np
+
 
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
