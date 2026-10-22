@@ -15,7 +15,6 @@ from Crypto.Math.Numbers import Integer
 from Crypto.Util._raw_api import (
     SmartPointer,
     VoidPointer,
-    c_size_t,
     c_uint8_ptr,
     c_uint8_ptr_len,
     c_uint8_ptr_out,
@@ -47,7 +46,7 @@ class EccPoint:
 
         raw_point = VoidPointer()
         context = _curve_context(self._curve)
-        new_point(raw_point.address_of(), c_uint8_ptr(xb), c_uint8_ptr(yb), c_size_t(modulus_bytes), context)
+        new_point(raw_point.address_of(), c_uint8_ptr(xb), c_uint8_ptr(yb), modulus_bytes, context)
         self._point = SmartPointer(raw_point.get(), free_func)
 
     def copy(self) -> EccPoint:return _copy_point(self)
@@ -87,7 +86,7 @@ class EccPoint:
         yb = bytearray(modulus_bytes)
         get_xy = self._curve.rawlib.get_xy
         with c_uint8_ptr_out(xb) as xb_ptr, c_uint8_ptr_out(yb) as yb_ptr:
-            result = get_xy(xb_ptr, yb_ptr, c_size_t(modulus_bytes), self._point.get())
+            result = get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
         if result:
             raise ValueError("Error %d while encoding an EC point" % result)
         return xb, yb
@@ -116,12 +115,12 @@ class EccPoint:
         if public_func is not None and isinstance(scalar, IntegerBase) and scalar._public:
             sb = scalar.to_bytes()
             sb_ptr, sb_len = c_uint8_ptr_len(sb)
-            result = public_func(self._point.get(), sb_ptr, c_size_t(sb_len))
+            result = public_func(self._point.get(), sb_ptr, sb_len)
         else:
             sb = _encode_scalar(scalar, self.size_in_bytes())
             sb_ptr, sb_len = c_uint8_ptr_len(sb)
             result = self._curve.rawlib.scalar(
-                self._point.get(), sb_ptr, c_size_t(sb_len), c_ulonglong(getrandbits(64))
+                self._point.get(), sb_ptr, sb_len, c_ulonglong(getrandbits(64))
             )
         if result:
             raise ValueError("Error %d during scalar multiplication" % result)
