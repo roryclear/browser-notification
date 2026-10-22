@@ -14,11 +14,20 @@ import cffi
 from Crypto.Math.Numbers import Integer
 
 from Crypto.Util._raw_api import (
-    c_uint8_ptr_out,
     c_ulonglong,
+    c_uint8_ptr
 )
 
 from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar, getrandbits
+
+
+class c_uint8_ptr_out:
+    def __init__(self, data: Any) -> None:
+        self._data = data
+        self._copy: Any = None
+
+    def __enter__(self) -> Any: return c_uint8_ptr(self._data)
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None: pass
 
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
