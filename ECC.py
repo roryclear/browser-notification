@@ -293,7 +293,7 @@ class EccKey:
         curve: Optional[str] = None,
         d: Optional[Union[int, Any]] = None,
         seed: Optional[bytes] = None,
-        point: Optional[Union[EccPoint, Any]] = None,
+        point: Optional[Union[Any, Any]] = None,
     ) -> None:
         curve_name = curve
         # Which of these attributes are set depends on the type of key
@@ -321,7 +321,7 @@ class EccKey:
         return (r, s)
 
     @property
-    def pointQ(self) -> EccPoint:
+    def pointQ(self) -> Any:
         if self._point is None:
             self._point = self._curve.G * self._d
         return self._point
