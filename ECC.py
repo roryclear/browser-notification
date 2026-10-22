@@ -15,7 +15,6 @@ from Crypto.Math.Numbers import Integer
 from Crypto.Util._raw_api import (
     SmartPointer,
     VoidPointer,
-    c_uint8_ptr_len,
     c_uint8_ptr_out,
     c_ulonglong,
 )
@@ -113,11 +112,11 @@ class EccPoint:
         public_func = getattr(self._curve.rawlib, "scalar_public", None)
         if public_func is not None and isinstance(scalar, IntegerBase) and scalar._public:
             sb = scalar.to_bytes()
-            sb_ptr, sb_len = c_uint8_ptr_len(sb)
+            sb_ptr, sb_len = sb, len(sb)
             result = public_func(self._point.get(), sb_ptr, sb_len)
         else:
             sb = _encode_scalar(scalar, self.size_in_bytes())
-            sb_ptr, sb_len = c_uint8_ptr_len(sb)
+            sb_ptr, sb_len = sb, len(sb)
             result = self._curve.rawlib.scalar(
                 self._point.get(), sb_ptr, sb_len, c_ulonglong(getrandbits(64))
             )
