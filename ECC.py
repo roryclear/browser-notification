@@ -11,7 +11,7 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerObject
+from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
@@ -41,6 +41,55 @@ class BytesIO_EOF:
 
     def read_byte(self) -> int:
         return self.read(1)[0]
+
+class DerObject:
+    def __init__(
+        self,
+        asn1Id: Optional[Union[int, bytes]] = None,
+        payload: bytes = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        constructed: bool = False,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        self._tag_octet = None
+        return
+
+    def _convertTag(self, tag: Union[int, bytes]) -> int: return tag
+
+    def _decodeLen(self, s: BytesIO_EOF) -> int:
+        length = s.read_byte()
+        return length
+
+    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s, strict)
+        return self
+
+    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+        """Decode a complete DER element from a file."""
+
+        idOctet = s.read_byte()
+        if self._tag_octet is not None:
+            if idOctet != self._tag_octet:
+                raise ValueError("Unexpected DER tag")
+        else:
+            self._tag_octet = idOctet
+        length = self._decodeLen(s)
+        self.payload = s.read(length)
+
+        # In case of an EXTERNAL tag, further decode the inner
+        # element.
+        if hasattr(self, "_inner_tag_octet"):
+            p = BytesIO_EOF(self.payload)
+            inner_octet = p.read_byte()
+            if inner_octet != self._inner_tag_octet:
+                raise ValueError("Unexpected internal DER tag")
+            length = self._decodeLen(p)
+            self.payload = p.read(length)
+
+            # There shouldn't be other bytes left
+            if p.remaining_data() > 0:
+                raise ValueError("Unexpected extra data after the DER structure")
 
 class DerSequence(DerObject):
     def __init__(
