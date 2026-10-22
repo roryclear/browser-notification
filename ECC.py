@@ -8,9 +8,9 @@ from typing import (
     Union,
     cast,
 )
+import random
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Random import get_random_bytes
 from Crypto.Util._bytes import tobytes
 from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerSequence
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
@@ -124,11 +124,10 @@ class EccKey:
             return self._export_openssh(compress)
 
 
-def generate(*, curve: str, randfunc: Optional[RNG] = None) -> EccKey:
+def generate(*, curve) -> EccKey:
     curve_name = curve
     curve_info = _curves[curve_name]
-    randfunc = get_random_bytes
-    d = Integer.random_range(min_inclusive=1, max_exclusive=curve_info.order, randfunc=randfunc)
+    d = random.randrange(1, curve_info.order)
     new_key = EccKey(curve=curve_name, d=d)
 
     return new_key
