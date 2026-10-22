@@ -11,11 +11,62 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerSequence
+from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerObject, BytesIO_EOF
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Any]
+
+class DerSequence(DerObject):
+    def __init__(
+        self,
+        startSeq = None,
+        implicit: Optional[int] = None,
+        explicit: Optional[int] = None,
+    ) -> None:
+        DerObject.__init__(self, 0x10, b"", implicit, True, explicit)
+        self._seq: list[Any]
+        if startSeq is None:
+            self._seq = []
+        else:
+            self._seq = cast(list[Any], startSeq)
+
+
+    def __getitem__(self, n: Union[int, slice]) -> Any: return self._seq[n]
+
+    def __len__(self) -> int: return len(self._seq)
+
+    def decode(
+        self,
+        der_encoded: bytes,
+        strict: bool = False,
+        nr_elements: Optional[Union[int, Iterable[int]]] = None,
+        only_ints_expected: bool = False,
+    ) -> DerSequence:
+        self._nr_elements = nr_elements
+        result = DerObject.decode(self, der_encoded, strict=strict)
+        return result
+
+    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+        self._seq = []
+
+        # Fill up self.payload
+        DerObject._decodeFromStream(self, s, strict)
+
+        # Add one item at a time to self.seq, by scanning self.payload
+        p = BytesIO_EOF(self.payload)
+        while p.remaining_data() > 0:
+            p.set_bookmark()
+
+            der = DerObject()
+            der._decodeFromStream(p, strict)
+
+            # Parse INTEGERs differently
+            if der._tag_octet != 0x02:
+                self._seq.append(p.data_since_bookmark())
+            else:
+                data = p.data_since_bookmark()
+                self._seq.append(1)
 
 
 class ConstructParams(TypedDict, total=False):
