@@ -2,8 +2,7 @@ from __future__ import annotations
 import struct
 from typing import Callable, Literal, Optional, Union, overload
 
-from Crypto.Hash import HMAC
-
+import HMAC
 Buffer = Union[bytes, bytearray, memoryview]
 RNG = Callable[[int], bytes]
 PRF = Callable[[bytes, bytes], bytes]
