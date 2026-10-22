@@ -13,13 +13,9 @@ import cffi
 
 from Crypto.Math.Numbers import Integer
 
-from Crypto.Util._raw_api import (
-    c_ulonglong,
-    c_uint8_ptr
-)
-
 from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar, getrandbits
 
+def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
 
 class c_uint8_ptr_out:
     def __init__(self, data: Any) -> None:
@@ -140,7 +136,7 @@ class EccPoint:
             sb = _encode_scalar(scalar, self.size_in_bytes())
             sb_ptr, sb_len = sb, len(sb)
             result = self._curve.rawlib.scalar(
-                self._point.get(), sb_ptr, sb_len, c_ulonglong(getrandbits(64))
+                self._point.get(), sb_ptr, sb_len, getrandbits(64)
             )
         if result:
             raise ValueError("Error %d during scalar multiplication" % result)
