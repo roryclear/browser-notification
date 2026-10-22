@@ -9,17 +9,30 @@ from typing import (
     cast,
 )
 import random, secrets
+import cffi
 
 from Crypto.Math.Numbers import Integer
 
 from Crypto.Util._raw_api import (
-    SmartPointer,
-    VoidPointer,
     c_uint8_ptr_out,
     c_ulonglong,
 )
 
 from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase, _encode_scalar, getrandbits
+
+class VoidPointer:
+    def __init__(self): self._pp = cffi.FFI().new("void *[1]")
+    def get(self): return self._pp[0]
+    def address_of(self): return self._pp
+
+
+class SmartPointer:
+    def __init__(self, raw_pointer: Any, destructor: Any) -> None:
+        self._raw_pointer = raw_pointer
+        self._destructor = destructor
+
+    def get(self) -> Any: return self._raw_pointer
+    def release(self) -> Any: pass
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Any]
