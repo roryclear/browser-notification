@@ -11,11 +11,36 @@ from typing import (
 import random, secrets
 
 from Crypto.Math.Numbers import Integer
-from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerObject, BytesIO_EOF
+from Crypto.Util.asn1 import DerBitString, DerObjectId, DerOctetString, DerObject
 from Crypto.PublicKey._point import EccPoint, EccXPoint, _curves
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Any]
+
+class BytesIO_EOF:
+    def __init__(self, initial_bytes: bytes) -> None:
+        self._buffer = initial_bytes
+        self._index = 0
+        self._bookmark: Optional[int] = None
+
+    def set_bookmark(self) -> None:
+        self._bookmark = self._index
+
+    def data_since_bookmark(self) -> bytes:
+        assert self._bookmark is not None
+        return self._buffer[self._bookmark : self._index]
+
+    def remaining_data(self) -> int:
+        return len(self._buffer) - self._index
+
+    def read(self, length: int) -> bytes:
+        new_index = self._index + length
+        result = self._buffer[self._index : new_index]
+        self._index = new_index
+        return result
+
+    def read_byte(self) -> int:
+        return self.read(1)[0]
 
 class DerSequence(DerObject):
     def __init__(
@@ -40,14 +65,14 @@ class DerSequence(DerObject):
         self,
         der_encoded: bytes,
         strict: bool = False,
-        nr_elements: Optional[Union[int, Iterable[int]]] = None,
+        nr_elements: Optional[Union[int, Any[int]]] = None,
         only_ints_expected: bool = False,
     ) -> DerSequence:
         self._nr_elements = nr_elements
         result = DerObject.decode(self, der_encoded, strict=strict)
         return result
 
-    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+    def _decodeFromStream(self, s: Any, strict: bool) -> None:
         self._seq = []
 
         # Fill up self.payload
