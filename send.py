@@ -15,7 +15,7 @@ import DSS
 import AES
 import ECC
 
-from Crypto.Protocol.KDF import HKDF
+from KDF import HKDF
 
 def num_to_bytes(n, pad_to):
     h = "%x" % n
