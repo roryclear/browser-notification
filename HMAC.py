@@ -3,10 +3,10 @@ from __future__ import annotations
 from Crypto.Util._raw_api import (
     c_uint8_ptr,
     create_output_buffer,
-    get_raw_buffer,
     load_pycryptodome_raw_lib,
 )
 
+import cffi
 
 class c_uint8_ptr_out:
     def __init__(self, data) -> None:
@@ -76,7 +76,7 @@ def strxor(
         term2_ptr, _ = term2, len(term2)
         _raw_strxor.strxor(term1_ptr, term2_ptr, result_ptr, term1_len)
 
-    return get_raw_buffer(result)
+    return cffi.FFI().buffer(result)[:]
 
 if TYPE_CHECKING:
     from types import ModuleType
