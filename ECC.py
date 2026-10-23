@@ -11,8 +11,7 @@ from typing import (
 import random, secrets
 import cffi
 
-from Crypto.Math.Numbers import Integer
-
+from Crypto.Math._IntegerNat import IntegerNat as Integer
 from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase
 
 def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
