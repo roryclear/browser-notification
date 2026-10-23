@@ -74,38 +74,6 @@ Buffer = Union[bytes, bytearray, memoryview]
 
 __all__ = ["new", "HMAC"]
 
-_hash2hmac_oid = {
-    "1.3.14.3.2.26": "1.2.840.113549.2.7",  # SHA-1
-    "2.16.840.1.101.3.4.2.4": "1.2.840.113549.2.8",  # SHA-224
-    "2.16.840.1.101.3.4.2.1": "1.2.840.113549.2.9",  # SHA-256
-    "2.16.840.1.101.3.4.2.2": "1.2.840.113549.2.10",  # SHA-384
-    "2.16.840.1.101.3.4.2.3": "1.2.840.113549.2.11",  # SHA-512
-    "2.16.840.1.101.3.4.2.5": "1.2.840.113549.2.12",  # SHA-512_224
-    "2.16.840.1.101.3.4.2.6": "1.2.840.113549.2.13",  # SHA-512_256
-    "2.16.840.1.101.3.4.2.7": "2.16.840.1.101.3.4.2.13",  # SHA-3 224
-    "2.16.840.1.101.3.4.2.8": "2.16.840.1.101.3.4.2.14",  # SHA-3 256
-    "2.16.840.1.101.3.4.2.9": "2.16.840.1.101.3.4.2.15",  # SHA-3 384
-    "2.16.840.1.101.3.4.2.10": "2.16.840.1.101.3.4.2.16",  # SHA-3 512
-}
-
-_hmac2hash_oid = {v: k for k, v in _hash2hmac_oid.items()}
-
-
-def _default_digestmod() -> ModuleType:
-    """Return MD5, the deprecated default hash, with a warning
-    for the caller of :func:`new` (or of the :class:`HMAC` class)."""
-
-    warnings.warn(
-        "HMAC without 'digestmod' uses MD5, but this default is deprecated "
-        "and will be removed: pass the hash explicitly (for instance, digestmod=SHA256)",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    from Crypto.Hash import MD5
-
-    return MD5
-
-
 class HMAC:
     """An HMAC hash object.
     Do not instantiate directly. Use the :func:`new` function.
@@ -129,11 +97,6 @@ class HMAC:
 
         self._digestmod = digestmod
 
-        # Hash OID --> HMAC OID
-        try:
-            self.oid = _hash2hmac_oid[digestmod.oid]
-        except (KeyError, AttributeError):
-            pass
 
         try:
             if len(key) <= digestmod.block_size:
