@@ -1,20 +1,10 @@
-#
-#  PublicKey/PKCS8.py : PKCS#8 functions
-#
-# SPDX-FileCopyrightText: 2014 Legrandin <helderijs@gmail.com>
-# SPDX-License-Identifier: BSD-2-Clause
-
-
 from __future__ import annotations
-
 from typing import Optional, Union
-
 from ECC import DerObjectId, DerOctetString
 
-from Crypto.Util.asn1 import DerInteger
-from Crypto.Util.number import bytes_to_long
-
 __all__ = ["wrap", "unwrap", "UnwrappedKey"]
+
+def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int: return int.from_bytes(s, "big")
 
 class DerObject:
     def __init__(
@@ -56,6 +46,17 @@ class DerObject:
         self._tag_octet = idOctet
         length = self._decodeLen(s)
         self.payload = s.read(length)
+
+class DerInteger(DerObject):
+    def __init__(
+        self,
+        value: int = 0,
+        implicit: Optional[Union[int, bytes]] = None,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        DerObject.__init__(self, 0x02, b"", implicit, False, explicit)
+        self.value = value
+
 
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
