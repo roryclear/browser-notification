@@ -12,8 +12,43 @@ import random, secrets
 import cffi
 import operator
 from abc import ABC
-from Crypto.Math._IntegerNat import _lib
 from Crypto.PublicKey._point import _curves
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
+
+_nat_cdecl = """
+int nat_new(void **out, size_t nw);
+void nat_free(void *x);
+int nat_copy(void *out, const void *a);
+int nat_from_bytes(void *out, const uint8_t *in, size_t len, int little_endian);
+int nat_to_bytes(uint8_t *out, size_t len, const void *a, int little_endian);
+int nat_from_uint64(void *out, uint64_t v);
+int nat_bit_length(const void *a);
+int nat_is_zero(const void *a);
+int nat_is_odd(const void *a);
+int nat_cmp(const void *a, const void *b);
+int nat_get_bit(const void *a, size_t n);
+int nat_add(void *out, const void *a, const void *b);
+int nat_sub(void *out, const void *a, const void *b);
+int nat_mul(void *out, const void *a, const void *b);
+int nat_muladd(void *out, const void *c, const void *a, const void *b);
+int nat_and(void *out, const void *a, const void *b);
+int nat_or(void *out, const void *a, const void *b);
+int nat_shl(void *out, const void *a, size_t k);
+int nat_shr(void *out, const void *a, size_t k);
+int nat_divmod(void *q, void *r, const void *a, const void *b);
+int nat_mod_small(void *out, const void *a, uint64_t d);
+int nat_mulmod(void *out, const void *a, const void *b, const void *m);
+int nat_submod(void *out, const void *a, const void *b, const void *m);
+int nat_powmod(void *out, const void *a, const void *e, size_t e_bits, const void *m);
+int nat_invmod(void *out, const void *a, const void *m);
+int nat_gcd(void *out, const void *a, const void *b);
+int nat_jacobi(void *out, const void *a, const void *n, int negate);
+int nat_isqrt(void *out, const void *a);
+int nat_miller_rabin(void *out, const void *n, const void *base);
+int nat_lucas(void *out, const void *n, uint64_t abs_d, int negative_d);
+"""
+_portable_lib = load_pycryptodome_raw_lib("Crypto.Math._nat", _nat_cdecl)
+_lib = _portable_lib
 
 null_pointer = cffi.FFI().NULL
 
