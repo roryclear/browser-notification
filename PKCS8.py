@@ -7,13 +7,11 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
-from Crypto.Util.asn1 import (
-    DerObjectId,
-    DerOctetString,
-    DerSequence,
-)
+from Crypto.Util.asn1 import DerSequence
+
+from ECC import DerObjectId, DerOctetString
 
 __all__ = ["wrap", "unwrap", "UnwrappedKey"]
 
