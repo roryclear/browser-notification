@@ -56,7 +56,8 @@ class EcbMode:
             )
         return get_raw_buffer(ciphertext)
 
-from Crypto.Cipher._mode_ctr import long_to_bytes, overload, threads_param, c_uint8_ptr_len, raw_ctr_lib, c_size_t, c_uint8_ptr_out
+from ECC import long_to_bytes
+from Crypto.Cipher._mode_ctr import threads_param, raw_ctr_lib
 from Crypto.Cipher._state_machine import Method
 
 class CtrMode:
@@ -75,12 +76,12 @@ class CtrMode:
             self.nonce = bytes(initial_counter_block[:prefix_len])
 
         state = VoidPointer()
-        initial_counter_block_ptr, initial_counter_block_len = c_uint8_ptr_len(initial_counter_block)
+        initial_counter_block_ptr, initial_counter_block_len = initial_counter_block, len(initial_counter_block)
         raw_ctr_lib.CTR_start_operation(
             block_cipher.get(),
             initial_counter_block_ptr,
-            c_size_t(initial_counter_block_len),
-            c_size_t(prefix_len),
+            initial_counter_block_len,
+            prefix_len,
             counter_len,
             little_endian,
             state.address_of(),
@@ -113,8 +114,8 @@ class CtrMode:
             if len(data) != len(output):
                 raise ValueError("output must have the same length as the input  (%d bytes)" % len(data))
 
-        with c_uint8_ptr_out(result_buffer) as result_ptr:
-            data_ptr, data_len = c_uint8_ptr_len(data)
+        with result_buffer as result_ptr:
+            data_ptr, data_len = data, len(data)
             # Check the lengths of the buffers that C code gets
             if len(result_ptr) != data_len:
                 raise ValueError("output must have the same length as the input  (%d bytes)" % data_len)
@@ -129,7 +130,7 @@ class CtrMode:
     def _ctr(self, in_ptr, out_ptr, data_len: int) -> int:
         if self._threads > 1:
             return _ctr_threaded(self._state.get(), in_ptr, out_ptr, data_len, self._threads)
-        return raw_ctr_lib.CTR_encrypt(self._state.get(), in_ptr, out_ptr, c_size_t(data_len))
+        return raw_ctr_lib.CTR_encrypt(self._state.get(), in_ptr, out_ptr, data_len)
 
     @staticmethod
     def _check(result: int, what: str) -> None:
