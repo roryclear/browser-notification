@@ -13,7 +13,19 @@ import cffi
 import operator
 from abc import ABC
 from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer, create_string_buffer, get_raw_buffer
-from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point
+from Crypto.PublicKey._point import _curves, _encode_coordinate
+
+def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int:
+    return int.from_bytes(s, "big")
+
+def long_to_bytes(n: int, blocksize: int = 0) -> bytes:
+    n = operator.index(n)
+    length = max((n.bit_length() + 7) // 8, 1)
+    if blocksize > 0: length = ceil_div(length, blocksize) * blocksize
+    return n.to_bytes(length, "big")
+
+def _curve_context(curve: _Curve) -> Any:
+    return null_pointer if curve.context is None else curve.context.get()
 
 class IntegerBase(ABC):
     _public: bool = False
@@ -312,10 +324,9 @@ class EccPoint:
 
         xb = _encode_coordinate(x, modulus_bytes)
         yb = _encode_coordinate(y, modulus_bytes)
-        if self._curve.id in _nist_curve_ids:
-            p = int(self._curve.p)
-            xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
-            yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
+        p = int(self._curve.p)
+        xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
+        yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
 
         new_point = self._curve.rawlib.new_point
         free_func = self._curve.rawlib.free_point
