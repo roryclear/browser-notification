@@ -12,10 +12,17 @@ import random, secrets
 import cffi
 import operator
 from abc import ABC
-from Crypto.Math._IntegerNat import _new_nat, _lib
+from Crypto.Math._IntegerNat import _lib
 from Crypto.PublicKey._point import _curves
 
 null_pointer = cffi.FFI().NULL
+
+def _new_nat(bits: int) -> SmartPointer:
+    nw = max(1, (bits + 63) // 64)
+    raw = VoidPointer()
+    _lib.nat_new(raw.address_of(), nw)
+    return SmartPointer(raw.get(), _lib.nat_free)
+
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
     result = cffi.FFI().new("uint8_t[]", init_or_size)
