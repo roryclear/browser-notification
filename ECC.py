@@ -14,7 +14,6 @@ import operator
 from abc import ABC
 from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer, create_string_buffer, get_raw_buffer
 from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point
-from Crypto.Math._IntegerBase import Random
 
 class IntegerBase(ABC):
     _public: bool = False
@@ -28,51 +27,15 @@ class IntegerBase(ABC):
         *,
         exact_bits: Optional[int] = None,
         max_bits: Optional[int] = None,
-        randfunc: Optional[RandFunc] = None,
+        randfunc=None,
     ) -> IntegerBase:
-        """Generate a random natural integer of a certain size.
-
-        :Keywords:
-          exact_bits : positive integer
-            The length in bits of the resulting random Integer number.
-            The number is guaranteed to fulfil the relation:
-
-                2^bits > result >= 2^(bits - 1)
-
-          max_bits : positive integer
-            The maximum length in bits of the resulting random Integer number.
-            The number is guaranteed to fulfil the relation:
-
-                2^bits > result >=0
-
-          randfunc : callable
-            A function that returns a random byte string. The length of the
-            byte string is passed as parameter. Optional.
-            If not provided (or ``None``), randomness is read from the system RNG.
-
-        :Return: a Integer object
-        """
-
-        if randfunc is None:
-            randfunc = Random.get_random_bytes
-
-        if exact_bits is not None:
-            if max_bits is not None:
-                raise ValueError("'exact_bits' and 'max_bits' are mutually exclusive")
-            bits = exact_bits
-        elif max_bits is not None:
-            bits = max_bits
-        else:
-            raise ValueError("Either 'exact_bits' or 'max_bits' must be specified")
-
+        bits = max_bits
         bytes_needed = ((bits - 1) // 8) + 1
         significant_bits_msb = 8 - (bytes_needed * 8 - bits)
-        msb = randfunc(1)[0]
-        if exact_bits is not None:
-            msb |= 1 << (significant_bits_msb - 1)
+        msb = secrets.token_bytes(1)[0]
         msb &= (1 << significant_bits_msb) - 1
-
-        return cls.from_bytes(bytes([msb]) + randfunc(bytes_needed - 1))
+        ret = cls.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
+        return ret
 
     @classmethod
     def random_range(
@@ -85,14 +48,11 @@ class IntegerBase(ABC):
     ) -> IntegerBase:
         max_inclusive = max_exclusive - 1
 
-        if randfunc is None:
-            randfunc = Random.get_random_bytes
-
         norm_maximum = cls(max_inclusive) - min_inclusive
         bits_needed = norm_maximum.size_in_bits()
 
         while True:
-            norm_candidate = cls.random(max_bits=bits_needed, randfunc=randfunc)
+            norm_candidate = cls.random(max_bits=bits_needed)
             if norm_candidate <= norm_maximum:
                 return norm_candidate + min_inclusive
 
