@@ -47,8 +47,7 @@ int nat_isqrt(void *out, const void *a);
 int nat_miller_rabin(void *out, const void *n, const void *base);
 int nat_lucas(void *out, const void *n, uint64_t abs_d, int negative_d);
 """
-_portable_lib = load_pycryptodome_raw_lib("Crypto.Math._nat", _nat_cdecl)
-_lib = _portable_lib
+_lib = load_pycryptodome_raw_lib("Crypto.Math._nat", _nat_cdecl)
 
 null_pointer = cffi.FFI().NULL
 
