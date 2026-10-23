@@ -731,16 +731,11 @@ class EccKey:
         seed: Optional[bytes] = None,
         point: Optional[Union[Any, Any]] = None,
     ) -> None:
-        curve_name = curve
         # Which of these attributes are set depends on the type of key
         self._d: Any = cast(Any, d)
         self._seed: Any = cast(Any, seed)
         self._point: Any = cast(Any, point)
-        if curve_name is None and self._point:
-            curve_name = self._point.curve
-
-        self._curve = _curves[curve_name]
-        self.curve = self._curve.canonical
+        self._curve = _curves[curve]
 
     # ECDSA
     def _sign(self, z, k):
