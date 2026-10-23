@@ -12,8 +12,14 @@ import random, secrets
 import cffi
 import operator
 from abc import ABC
-from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer, create_string_buffer, get_raw_buffer
+from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer
 from Crypto.PublicKey._point import _curves
+
+def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
+    result = cffi.FFI().new("uint8_t[]", init_or_size)
+    return result
+
+def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
 def _encode_coordinate(value: Union[int, IntegerBase], length: int) -> bytes:
     encoded = long_to_bytes(int(value), length)
