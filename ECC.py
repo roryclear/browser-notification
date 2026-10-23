@@ -56,7 +56,7 @@ def _new_nat(bits: int) -> SmartPointer:
     nw = max(1, (bits + 63) // 64)
     raw = VoidPointer()
     _lib.nat_new(raw.address_of(), nw)
-    return SmartPointer(raw.get(), _lib.nat_free)
+    return SmartPointer(raw.get())
 
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
@@ -316,7 +316,7 @@ def _copy_point(point):
 def _clone_raw_point(curve, point) -> SmartPointer:
     raw_point = VoidPointer()
     curve.rawlib.clone(raw_point.address_of(), point._point.get())
-    return SmartPointer(raw_point.get(), curve.rawlib.free_point)
+    return SmartPointer(raw_point.get())
 
 class StrongRandom:
     def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
@@ -348,9 +348,8 @@ class VoidPointer:
 
 
 class SmartPointer:
-    def __init__(self, raw_pointer: Any, destructor: Any) -> None:
+    def __init__(self, raw_pointer: Any) -> None:
         self._raw_pointer = raw_pointer
-        self._destructor = destructor
 
     def get(self) -> Any: return self._raw_pointer
     def release(self) -> Any: pass
@@ -373,12 +372,11 @@ class EccPoint:
         yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
 
         new_point = self._curve.rawlib.new_point
-        free_func = self._curve.rawlib.free_point
 
         raw_point = VoidPointer()
         context = _curve_context(self._curve)
         new_point(raw_point.address_of(), xb, yb, modulus_bytes, context)
-        self._point = SmartPointer(raw_point.get(), free_func)
+        self._point = SmartPointer(raw_point.get())
 
     def copy(self) -> EccPoint:return _copy_point(self)
 
