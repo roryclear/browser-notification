@@ -1,6 +1,6 @@
 import sys
 from typing import Any, Literal, Union
-
+from ECC import SmartPointer
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 import cffi
@@ -27,14 +27,6 @@ class VoidPointer:
     def address_of(self): return self._pp
 
 backend: str = "cffi"
-
-class SmartPointer:
-    def __init__(self, raw_pointer: Any, destructor: Any) -> None:
-        self._raw_pointer = raw_pointer
-        self._destructor = destructor
-
-    def get(self) -> Any: return self._raw_pointer
-    def release(self) -> Any: pass
 
 Buffer = Union[bytes, bytearray, memoryview]
 
@@ -68,7 +60,7 @@ def _create_base_cipher(dict_parameters):
     cipher = VoidPointer()
     key_ptr, key_len = key, len(key)
     start_operation(key_ptr, key_len, cipher.address_of())
-    return SmartPointer(cipher.get(), stop_operation)
+    return SmartPointer(cipher.get())
 
 def new(key: Buffer, mode: int, *args: Any, **kwargs: Any) -> Any:
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
