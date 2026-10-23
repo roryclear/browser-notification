@@ -1,45 +1,82 @@
-#
-# HMAC.py - Implements the HMAC algorithm as described by RFC 2104.
-#
-# ===================================================================
-#
-# Copyright (c) 2014, Legrandin <helderijs@gmail.com>
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in
-#    the documentation and/or other materials provided with the
-#    distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-# ===================================================================
-
 from __future__ import annotations
+
+from Crypto.Util._raw_api import (
+    c_uint8_ptr,
+    create_output_buffer,
+    get_raw_buffer,
+    load_pycryptodome_raw_lib,
+)
+
+
+class c_uint8_ptr_out:
+    def __init__(self, data) -> None:
+        self._data = data
+        self._copy =None
+
+    def __enter__(self): return c_uint8_ptr(self._data)
+    def __exit__(self, exc_type, exc_value, traceback) -> None: pass
+
+
+_raw_strxor = load_pycryptodome_raw_lib(
+    "Crypto.Util._strxor",
+    """
+                    void strxor(const uint8_t *in1,
+                                const uint8_t *in2,
+                                uint8_t *out, size_t len);
+                    void strxor_c(const uint8_t *in,
+                                  uint8_t c,
+                                  uint8_t *out,
+                                  size_t len);
+                    """,
+)
+
 
 import warnings
 from binascii import unhexlify
 from hmac import compare_digest
 from typing import TYPE_CHECKING, Optional, Union
 
-from Crypto.Util._bytes import tobytes
-from Crypto.Util.strxor import strxor
+def strxor(
+    term1: Buffer, term2: Buffer, output: Optional[Union[bytearray, memoryview]] = None
+) -> Optional[bytes]:
+    """From two byte strings of equal length,
+    create a third one which is the byte-by-byte XOR of the two.
+
+    Args:
+      term1 (bytes/bytearray/memoryview):
+        The first byte string to XOR.
+      term2 (bytes/bytearray/memoryview):
+        The second byte string to XOR.
+      output (bytearray/memoryview):
+        The location where the result will be written to.
+        It must have the same length as ``term1`` and ``term2``.
+        If ``None``, the result is returned.
+    :Return:
+        If ``output`` is ``None``, a new byte string with the result.
+        Otherwise ``None``.
+
+    .. note::
+        ``term1`` and ``term2`` must have the same length.
+    """
+
+    if len(term1) != len(term2):
+        raise ValueError("Only byte strings of equal length can be xored")
+
+    if output is None:
+        result = create_output_buffer(len(term1))
+    else:
+        # Note: output may overlap with either input
+        result = output
+
+        if len(term1) != len(output):
+            raise ValueError("output must have the same length as the input  (%d bytes)" % len(term1))
+
+    with c_uint8_ptr_out(result) as result_ptr:
+        term1_ptr, term1_len = term1, len(term1)
+        term2_ptr, _ = term2, len(term2)
+        _raw_strxor.strxor(term1_ptr, term2_ptr, result_ptr, term1_len)
+
+    return get_raw_buffer(result)
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -108,9 +145,6 @@ class HMAC:
             self.oid = _hash2hmac_oid[digestmod.oid]
         except (KeyError, AttributeError):
             pass
-
-        if isinstance(key, memoryview):
-            key = key.tobytes()
 
         try:
             if len(key) <= digestmod.block_size:
@@ -209,21 +243,6 @@ class HMAC:
         """
 
         return self.digest().hex()
-
-    def hexverify(self, hex_mac_tag: str) -> None:
-        """Verify that a given **printable** MAC (computed by another party)
-        is valid.
-
-        Args:
-            hex_mac_tag (string): the expected MAC of the message,
-                as a hexadecimal string.
-
-        Raises:
-            ValueError: if the MAC does not match. It means that the message
-                has been tampered with or that the MAC key is incorrect.
-        """
-
-        self.verify(unhexlify(tobytes(hex_mac_tag)))
 
 
 def new(key: Buffer, msg: Buffer = b"", digestmod: Optional[ModuleType] = None) -> HMAC:
