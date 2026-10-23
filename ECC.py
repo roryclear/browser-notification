@@ -13,7 +13,11 @@ import cffi
 import operator
 from abc import ABC
 from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer, create_string_buffer, get_raw_buffer
-from Crypto.PublicKey._point import _curves, _encode_coordinate
+from Crypto.PublicKey._point import _curves
+
+def _encode_coordinate(value: Union[int, IntegerBase], length: int) -> bytes:
+    encoded = long_to_bytes(int(value), length)
+    return encoded
 
 def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int:
     return int.from_bytes(s, "big")
