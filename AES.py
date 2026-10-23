@@ -56,6 +56,142 @@ class EcbMode:
             )
         return get_raw_buffer(ciphertext)
 
+from Crypto.Cipher._mode_ctr import long_to_bytes, overload, threads_param, c_uint8_ptr_len, raw_ctr_lib, c_size_t, c_uint8_ptr_out
+from Crypto.Cipher._state_machine import Method
+
+class CtrMode:
+    def __init__(
+        self,
+        block_cipher: SmartPointer,
+        initial_counter_block: Buffer,
+        prefix_len: int,
+        counter_len: int,
+        little_endian: bool,
+        threads: int = 1,
+    ) -> None:
+        self._threads = threads_param(threads)
+
+        if len(initial_counter_block) == prefix_len + counter_len:
+            self.nonce = bytes(initial_counter_block[:prefix_len])
+
+        state = VoidPointer()
+        initial_counter_block_ptr, initial_counter_block_len = c_uint8_ptr_len(initial_counter_block)
+        raw_ctr_lib.CTR_start_operation(
+            block_cipher.get(),
+            initial_counter_block_ptr,
+            c_size_t(initial_counter_block_len),
+            c_size_t(prefix_len),
+            counter_len,
+            little_endian,
+            state.address_of(),
+        )
+        self._state = SmartPointer(state.get())
+
+        self.block_size = len(initial_counter_block)
+        self._next = [Method.ENCRYPT, Method.DECRYPT]
+        
+    def encrypt(
+        self, plaintext: Buffer, output: Optional[Union[bytearray, memoryview]] = None
+    ) -> Optional[bytes]:
+        self._next = [Method.ENCRYPT]
+        return self._process(plaintext, output, "encrypting")
+
+
+    def _process(
+        self, data: Buffer, output: Optional[Union[bytearray, memoryview]], what: str
+    ) -> Optional[bytes]:
+        """Encrypt or decrypt (which are the same operation in CTR mode)"""
+
+        if output is None:
+            result_buffer = create_output_buffer(len(data))
+        else:
+            result_buffer = output
+
+            if not is_writeable_buffer(output):
+                raise TypeError("output must be a bytearray or a writeable memoryview")
+
+            if len(data) != len(output):
+                raise ValueError("output must have the same length as the input  (%d bytes)" % len(data))
+
+        with c_uint8_ptr_out(result_buffer) as result_ptr:
+            data_ptr, data_len = c_uint8_ptr_len(data)
+            # Check the lengths of the buffers that C code gets
+            if len(result_ptr) != data_len:
+                raise ValueError("output must have the same length as the input  (%d bytes)" % data_len)
+            result = self._ctr(data_ptr, result_ptr, data_len)
+        self._check(result, what)
+
+        if output is None:
+            return get_raw_buffer(result_buffer)
+        else:
+            return None
+
+    def _ctr(self, in_ptr, out_ptr, data_len: int) -> int:
+        if self._threads > 1:
+            return _ctr_threaded(self._state.get(), in_ptr, out_ptr, data_len, self._threads)
+        return raw_ctr_lib.CTR_encrypt(self._state.get(), in_ptr, out_ptr, c_size_t(data_len))
+
+    @staticmethod
+    def _check(result: int, what: str) -> None:
+        if result:
+            if result == 0x60002:
+                raise MessageTooLongError("The counter has wrapped around in CTR mode")
+            raise ValueError("Error %X while %s in CTR mode" % (result, what))
+
+def _create_ctr_cipher(factory, **kwargs):
+    threads = kwargs.pop("threads", 1)
+
+    cipher_state = factory._create_base_cipher(kwargs)
+
+    counter = kwargs.pop("counter", None)
+    nonce = kwargs.pop("nonce", None)
+    initial_value = kwargs.pop("initial_value", None)
+    if counter is None:
+
+        # What is not nonce is counter
+        counter_len = factory.block_size - len(nonce)
+
+        if initial_value is None:
+            initial_value = 0
+
+        if isinstance(initial_value, int):
+            initial_counter_block = nonce + long_to_bytes(initial_value, counter_len)
+        else:
+            if len(initial_value) != counter_len:
+                raise ValueError(
+                    "Incorrect length for counter byte string (%d bytes, expected %d)"
+                    % (len(initial_value), counter_len)
+                )
+            initial_counter_block = nonce + initial_value
+
+        return CtrMode(
+            cipher_state,
+            initial_counter_block,
+            len(nonce),  # prefix
+            counter_len,
+            False,  # little_endian
+            threads,
+        )
+
+    # Crypto.Util.Counter is used
+
+    # 'counter' used to be a callable object, but now it is
+    # just a dictionary for backward compatibility.
+    _counter = dict(counter)
+    counter_len = _counter.pop("counter_len")
+    prefix = _counter.pop("prefix")
+    suffix = _counter.pop("suffix")
+    initial_value = _counter.pop("initial_value")
+    little_endian = _counter.pop("little_endian")
+
+    # Compute initial counter block
+    words = []
+    words += [b"\x00"] * max(0, counter_len - len(words))
+    if not little_endian:
+        words.reverse()
+    initial_counter_block = prefix + b"".join(words) + suffix
+    return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian, threads)
+
 def _create_ecb_cipher(factory, **kwargs):
     cipher_state = factory._create_base_cipher(kwargs)
     cipher_state.block_size = factory.block_size
@@ -66,7 +202,6 @@ def _create_cipher(factory, key, mode, **kwargs):
         res = _create_ecb_cipher(factory, key=key)
 
     elif mode == 6:
-        from Crypto.Cipher._mode_ctr import _create_ctr_cipher
         res = _create_ctr_cipher(factory, key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
 
     elif mode == 11:
