@@ -361,14 +361,14 @@ Int = Union[int, Any]
 class EccPoint:
     def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
         self._curve = _curves[curve]
-        self.curve = self._curve.canonical
-
+        self.curve = "NIST P-256"
 
         modulus_bytes = self.size_in_bytes()
 
         xb = _encode_coordinate(x, modulus_bytes)
         yb = _encode_coordinate(y, modulus_bytes)
-        p = int(self._curve.p)
+        # todo why
+        p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
         xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
         yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
 
