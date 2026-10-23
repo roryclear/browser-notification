@@ -620,7 +620,7 @@ def import_key(
     threads: int = 1,
     max_memory: Optional[int] = None,
 ) -> EccKey:
-    from Crypto.IO import PEM
+    import PEM
 
     if encoded.startswith(b"-----"):
         text_encoded = encoded.decode("latin-1")
