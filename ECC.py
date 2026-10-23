@@ -13,49 +13,24 @@ import cffi
 import operator
 from abc import ABC
 from Crypto.PublicKey._point import _curves
-from Crypto.Util._raw_api import load_pycryptodome_raw_lib
-
-_nat_cdecl = """
-int nat_new(void **out, size_t nw);
-void nat_free(void *x);
-int nat_copy(void *out, const void *a);
-int nat_from_bytes(void *out, const uint8_t *in, size_t len, int little_endian);
-int nat_to_bytes(uint8_t *out, size_t len, const void *a, int little_endian);
-int nat_from_uint64(void *out, uint64_t v);
-int nat_bit_length(const void *a);
-int nat_is_zero(const void *a);
-int nat_is_odd(const void *a);
-int nat_cmp(const void *a, const void *b);
-int nat_get_bit(const void *a, size_t n);
-int nat_add(void *out, const void *a, const void *b);
-int nat_sub(void *out, const void *a, const void *b);
-int nat_mul(void *out, const void *a, const void *b);
-int nat_muladd(void *out, const void *c, const void *a, const void *b);
-int nat_and(void *out, const void *a, const void *b);
-int nat_or(void *out, const void *a, const void *b);
-int nat_shl(void *out, const void *a, size_t k);
-int nat_shr(void *out, const void *a, size_t k);
-int nat_divmod(void *q, void *r, const void *a, const void *b);
-int nat_mod_small(void *out, const void *a, uint64_t d);
-int nat_mulmod(void *out, const void *a, const void *b, const void *m);
-int nat_submod(void *out, const void *a, const void *b, const void *m);
-int nat_powmod(void *out, const void *a, const void *e, size_t e_bits, const void *m);
-int nat_invmod(void *out, const void *a, const void *m);
-int nat_gcd(void *out, const void *a, const void *b);
-int nat_jacobi(void *out, const void *a, const void *n, int negate);
-int nat_isqrt(void *out, const void *a);
-int nat_miller_rabin(void *out, const void *n, const void *base);
-int nat_lucas(void *out, const void *n, uint64_t abs_d, int negative_d);
-"""
-_lib = load_pycryptodome_raw_lib("Crypto.Math._nat", _nat_cdecl)
-
 null_pointer = cffi.FFI().NULL
 
-def _new_nat(bits: int) -> SmartPointer:
-    nw = max(1, (bits + 63) // 64)
-    raw = VoidPointer()
-    _lib.nat_new(raw.address_of(), nw)
-    return SmartPointer(raw.get())
+class Nat:
+    def __init__(self, bits: int):
+        self.nw = max(1, (bits + 63) // 64)
+        self.capacity = self.nw * 64
+        self.value = 0
+
+    def set(self, value: int):
+        if value < 0 or value.bit_length() > self.capacity:
+            raise ValueError("Value does not fit")
+        self.value = value
+
+    def get(self) -> int:
+        return self.value
+
+def _new_nat(bits: int) -> Nat:
+    return Nat(bits)
 
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
@@ -122,69 +97,77 @@ class IntegerBase(ABC):
                 return norm_candidate + min_inclusive
 
 
+
 class IntegerNat(IntegerBase):
-    """A natural number (0, 1, 2, ...), with constant-time arithmetic"""
+    def __init__(
+        self,
+        value: Union[IntegerBase, int],
+        _min_bits: int = 0,
+        *,
+        public: bool = False,
+    ) -> None:
+        self._public = public or (
+            isinstance(value, IntegerBase) and value._public
+        )
+        self.value = int(value)
 
-    _p: SmartPointer
-    _bits: int
+        if self.value < 0:
+            raise ValueError("Natural numbers cannot be negative")
 
-    def __init__(self, value: Union[IntegerBase, int], _min_bits: int = 0, *, public: bool = False) -> None:
-        self._public = public or (isinstance(value, IntegerBase) and value._public)
-        value = int(value)
-        nbytes = max(1, (value.bit_length() + 7) // 8)
-        self._alloc(max(value.bit_length(), _min_bits))
-        data = value.to_bytes(nbytes, "little")
-        _lib.nat_from_bytes(self._p.get(), data, nbytes, 1)
+        self._bits = max(1, self.value.bit_length(), _min_bits)
 
-    # Internal helpers
     def _alloc(self, bits: int) -> None:
         self._bits = max(1, bits)
-        self._p = _new_nat(self._bits)
+        self.value = 0
 
     @classmethod
-    def _make(cls, bits: int) -> IntegerNat:
-        """A new number equal to 0, with the given bound"""
+    def _make(cls, bits: int) -> "IntegerNat":
         obj = cls.__new__(cls)
         obj._alloc(bits)
+        obj._public = False
         return obj
 
-    def _adopt(self, other: IntegerNat) -> IntegerNat:
-        """Take the value, the bound and the public flag of another (temporary) number"""
-        self._p = other._p
+    def _adopt(self, other: "IntegerNat") -> "IntegerNat":
+        self.value = other.value
         self._bits = other._bits
         self._public = other._public
         return self
 
     @staticmethod
-    def _conv(term: Any) -> IntegerNat:
+    def _conv(term: Any) -> "IntegerNat":
+        if isinstance(term, IntegerNat):
+            return term
         return IntegerNat(operator.index(term))
 
     def _nw(self) -> int:
         return max(1, (self._bits + 63) // 64)
 
     def _is_zero(self) -> bool:
-        return bool(_lib.nat_is_zero(self._p.get()))
+        return self.value == 0
 
+    def is_odd(self) -> bool:
+        return bool(self.value & 1)
 
     def __int__(self) -> int:
-        nbytes = 8 * self._nw()
-        buf = create_string_buffer(nbytes)
-        _lib.nat_to_bytes(buf, nbytes, self._p.get(), 1)
-        return int.from_bytes(get_raw_buffer(buf), "little")
+        return self.value
 
     def __index__(self) -> int:
-        return int(self)
+        return self.value
 
     def __str__(self) -> str:
-        return str(int(self))
+        return str(self.value)
 
     def __repr__(self) -> str:
-        return "Integer(%s)" % str(self)
+        return "Integer(%s)" % self.value
 
-    def to_bytes(self, block_size: Optional[int] = 0, byteorder: str = "big") -> bytes:
-        buf = create_string_buffer(block_size)
-        _lib.nat_to_bytes(buf, block_size, self._p.get(), int(byteorder == "little"))
-        return get_raw_buffer(buf)
+    def to_bytes(
+        self,
+        block_size: Optional[int] = 0,
+        byteorder: str = "big",
+    ) -> bytes:
+        if block_size is None or block_size == 0:
+            block_size = max(1, (self.value.bit_length() + 7) // 8)
+        return self.value.to_bytes(block_size, byteorder)
 
     @classmethod
     def from_bytes(
@@ -194,107 +177,99 @@ class IntegerNat(IntegerBase):
         _min_bits: int = 0,
         *,
         public: bool = False,
-    ) -> IntegerNat:
-        length = len(byte_string)
-        result = cls._make(max(8 * length, _min_bits))
-        result._public = public
-        _lib.nat_from_bytes(
-            result._p.get(), c_uint8_ptr(byte_string), length, int(byteorder == "little")
-            )
-        return result
+    ) -> "IntegerNat":
+        value = int.from_bytes(byte_string, byteorder)
+        return cls(value, _min_bits, public=public)
 
-    # Relations
+    # Comparisons
 
     def _cmp(self, term: Any) -> int:
-        if isinstance(term, int) and term < 0:
-            return 1
-        # Keep a reference to the converted term until the C call is done
-        other = self._conv(term)
-        return _lib.nat_cmp(self._p.get(), other._p.get())
+        other = int(term)
+        return (self.value > other) - (self.value < other)
 
+    def __eq__(self, term: Any) -> bool:
+        try:
+            return self.value == int(term)
+        except (TypeError, ValueError):
+            return NotImplemented
 
-    def __le__(self, term: IntLike) -> bool:
+    def __lt__(self, term: Any) -> bool:
+        return self._cmp(term) < 0
+
+    def __le__(self, term: Any) -> bool:
         return self._cmp(term) <= 0
 
+    def __gt__(self, term: Any) -> bool:
+        return self._cmp(term) > 0
 
+    def __ge__(self, term: Any) -> bool:
+        return self._cmp(term) >= 0
 
-    # Arithmetic operations
+    # Arithmetic
 
-    def __add__(self, term: IntLike) -> IntegerNat:
-        public = self._is_public_with(term)
-        try:
-            term = self._conv(term)
-        except TypeError:
-            return NotImplemented
-        result = IntegerNat._make(max(self._bits, term._bits) + 1)
-        _lib.nat_add(result._p.get(), self._p.get(), term._p.get())
-        result._public = public
-        return result
+    def __add__(self, term: Any) -> "IntegerNat":
+        other = self._conv(term)
+        return IntegerNat(
+            self.value + other.value,
+            max(self._bits, other._bits) + 1,
+            public=self._public and other._public,
+        )
 
     __radd__ = __add__
 
-    def __sub__(self, term: IntLike) -> IntegerNat:
-        public = self._is_public_with(term)
-        try:
-            term = self._conv(term)
-        except TypeError:
-            return NotImplemented
-        result = IntegerNat._make(max(self._bits, term._bits))
-        _lib.nat_sub(result._p.get(), self._p.get(), term._p.get())
-        result._public = public
-        return result
+    def __sub__(self, term: Any) -> "IntegerNat":
+        other = self._conv(term)
+        value = self.value - other.value
+        if value < 0:
+            raise ValueError("Natural number subtraction underflow")
+        return IntegerNat(
+            value,
+            max(self._bits, other._bits),
+            public=self._public and other._public,
+        )
 
-
-    def __mul__(self, factor: IntLike) -> IntegerNat:
-        public = self._is_public_with(factor)
-        try:
-            factor = self._conv(factor)
-        except TypeError:
-            return NotImplemented
-        result = IntegerNat._make(self._bits + factor._bits)
-        _lib.nat_mul(result._p.get(), self._p.get(), factor._p.get())
-        result._public = public
-        return result
+    def __mul__(self, factor: Any) -> "IntegerNat":
+        other = self._conv(factor)
+        return IntegerNat(
+            self.value * other.value,
+            self._bits + other._bits,
+            public=self._public and other._public,
+        )
 
     __rmul__ = __mul__
 
-    def __mod__(self, divisor: IntLike) -> IntegerNat:
-        public = self._is_public_with(divisor)
+    def __mod__(self, divisor: Any) -> "IntegerNat":
         divisor = self._check_modulus(divisor)
-        result = IntegerNat._make(divisor._bits)
-        _lib.nat_divmod(null_pointer, result._p.get(), self._p.get(), divisor._p.get())
-        result._public = public
-        return result
+        return IntegerNat(
+            self.value % divisor.value,
+            divisor._bits,
+            public=self._public and divisor._public,
+        )
 
     @staticmethod
     def _check_modulus(
-        modulus: IntLike, name: str = "Modulus", zero_error: type[Exception] = ZeroDivisionError
-    ) -> IntegerNat:
-        """Convert a modulus into an IntegerNat.
-
-        ValueError if it is negative, zero_error if it is zero (only that fact leaks).
-        """
-        if isinstance(modulus, int) and modulus < 0:
-            raise ValueError("%s must be positive" % name)
+        modulus: Any,
+        name: str = "Modulus",
+        zero_error: type[Exception] = ZeroDivisionError,
+    ) -> "IntegerNat":
         modulus = IntegerNat._conv(modulus)
-        if modulus._is_zero():
+        if modulus.value == 0:
             raise zero_error("%s cannot be zero" % name)
         return modulus
 
     def size_in_bits(self) -> int:
-        return max(1, _lib.nat_bit_length(self._p.get()))
+        return max(1, self.value.bit_length())
 
-    def inplace_inverse(self, modulus: IntLike) -> IntegerNat:
-        public = self._is_public_with(modulus)
+    def inplace_inverse(self, modulus: Any) -> "IntegerNat":
         modulus = self._check_modulus(modulus)
-        result = IntegerNat._make(modulus._bits)
-        _lib.nat_invmod(result._p.get(), self._p.get(), modulus._p.get())
-        result._public = public
-        return self._adopt(result)
+        self.value = pow(self.value, -1, modulus.value)
+        self._bits = modulus._bits
+        return self
 
-    def inverse(self, modulus: IntLike) -> IntegerNat:
-        result = IntegerNat(self)
+    def inverse(self, modulus: Any) -> "IntegerNat":
+        result = IntegerNat(self, self._bits, public=self._public)
         return result.inplace_inverse(modulus)
+
 
 def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
 
