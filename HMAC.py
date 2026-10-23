@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 import cffi
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
@@ -17,60 +15,10 @@ class c_uint8_ptr_out:
     def __enter__(self): return self._data
     def __exit__(self, exc_type, exc_value, traceback) -> None: pass
 
+def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
-_raw_strxor = load_pycryptodome_raw_lib(
-    "Crypto.Util._strxor",
-    """
-                    void strxor(const uint8_t *in1,
-                                const uint8_t *in2,
-                                uint8_t *out, size_t len);
-                    void strxor_c(const uint8_t *in,
-                                  uint8_t c,
-                                  uint8_t *out,
-                                  size_t len);
-                    """,
-)
-
-
-import warnings
-from binascii import unhexlify
 from hmac import compare_digest
 from typing import TYPE_CHECKING, Optional, Union
-
-def strxor(
-    term1: Buffer, term2: Buffer, output: Optional[Union[bytearray, memoryview]] = None
-) -> Optional[bytes]:
-    """From two byte strings of equal length,
-    create a third one which is the byte-by-byte XOR of the two.
-
-    Args:
-      term1 (bytes/bytearray/memoryview):
-        The first byte string to XOR.
-      term2 (bytes/bytearray/memoryview):
-        The second byte string to XOR.
-      output (bytearray/memoryview):
-        The location where the result will be written to.
-        It must have the same length as ``term1`` and ``term2``.
-        If ``None``, the result is returned.
-    :Return:
-        If ``output`` is ``None``, a new byte string with the result.
-        Otherwise ``None``.
-
-    .. note::
-        ``term1`` and ``term2`` must have the same length.
-    """
-
-    if len(term1) != len(term2):
-        raise ValueError("Only byte strings of equal length can be xored")
-
-    result = create_output_buffer(len(term1))
-
-    with c_uint8_ptr_out(result) as result_ptr:
-        term1_ptr, term1_len = term1, len(term1)
-        term2_ptr, _ = term2, len(term2)
-        _raw_strxor.strxor(term1_ptr, term2_ptr, result_ptr, term1_len)
-
-    return cffi.FFI().buffer(result)[:]
 
 if TYPE_CHECKING:
     from types import ModuleType
