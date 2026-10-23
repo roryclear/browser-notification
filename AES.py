@@ -58,7 +58,6 @@ class EcbMode:
 
 from ECC import long_to_bytes
 from Crypto.Cipher._mode_ctr import threads_param, raw_ctr_lib
-from Crypto.Cipher._state_machine import Method
 
 class CtrMode:
     def __init__(
@@ -89,12 +88,10 @@ class CtrMode:
         self._state = SmartPointer(state.get())
 
         self.block_size = len(initial_counter_block)
-        self._next = [Method.ENCRYPT, Method.DECRYPT]
         
     def encrypt(
         self, plaintext: Buffer, output: Optional[Union[bytearray, memoryview]] = None
     ) -> Optional[bytes]:
-        self._next = [Method.ENCRYPT]
         return self._process(plaintext, output, "encrypting")
 
 
