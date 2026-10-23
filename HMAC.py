@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from Crypto.Util._raw_api import (
-    c_uint8_ptr,
-    create_output_buffer,
-    load_pycryptodome_raw_lib,
-)
-
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
+from _mode_ecb import create_output_buffer
 import cffi
 
 class c_uint8_ptr_out:
@@ -13,7 +9,7 @@ class c_uint8_ptr_out:
         self._data = data
         self._copy =None
 
-    def __enter__(self): return c_uint8_ptr(self._data)
+    def __enter__(self): return self._data
     def __exit__(self, exc_type, exc_value, traceback) -> None: pass
 
 
@@ -62,14 +58,7 @@ def strxor(
     if len(term1) != len(term2):
         raise ValueError("Only byte strings of equal length can be xored")
 
-    if output is None:
-        result = create_output_buffer(len(term1))
-    else:
-        # Note: output may overlap with either input
-        result = output
-
-        if len(term1) != len(output):
-            raise ValueError("output must have the same length as the input  (%d bytes)" % len(term1))
+    result = create_output_buffer(len(term1))
 
     with c_uint8_ptr_out(result) as result_ptr:
         term1_ptr, term1_len = term1, len(term1)
