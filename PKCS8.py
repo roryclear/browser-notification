@@ -11,9 +11,51 @@ from typing import Optional, Union
 
 from ECC import DerObjectId, DerOctetString
 
-from Crypto.Util.asn1 import DerObject, DerInteger
+from Crypto.Util.asn1 import DerInteger
+from Crypto.Util.number import bytes_to_long
 
 __all__ = ["wrap", "unwrap", "UnwrappedKey"]
+
+class DerObject:
+    def __init__(
+        self,
+        asn1Id: Optional[Union[int, bytes]] = None,
+        payload: bytes = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        constructed: bool = False,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        self._tag_octet: Optional[int]
+        if asn1Id is None:
+            self._tag_octet = None
+            return
+        asn1Id = self._convertTag(asn1Id)
+
+        self.payload = payload
+        constructed_bit = 0x20 if constructed else 0x00
+        self._tag_octet = constructed_bit | asn1Id
+
+    def _convertTag(self, tag: Union[int, bytes]) -> int:
+        return tag
+
+    def _decodeLen(self, s: BytesIO_EOF) -> int:
+        """Decode DER length octets from a file."""
+        length = s.read_byte()
+        if length > 127:
+            encoded_length = s.read(length & 0x7F)
+            length = bytes_to_long(encoded_length)
+        return length
+
+    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s, strict)
+        return self
+
+    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+        idOctet = s.read_byte()
+        self._tag_octet = idOctet
+        length = self._decodeLen(s)
+        self.payload = s.read(length)
 
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
