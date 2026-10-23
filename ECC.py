@@ -11,9 +11,91 @@ from typing import (
 import random, secrets
 import cffi
 import operator
-
+from abc import ABC
 from Crypto.Math._IntegerNat import _new_nat, _check, _lib, c_size_t, _ERR_VALUE, null_pointer, create_string_buffer, get_raw_buffer
-from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point, IntegerBase
+from Crypto.PublicKey._point import _curves, _encode_coordinate, _nist_curve_ids, long_to_bytes, bytes_to_long, _curve_context, _copy_point
+from Crypto.Math._IntegerBase import Random
+
+class IntegerBase(ABC):
+    _public: bool = False
+
+    def _is_public_with(self, term: Any) -> bool:
+        return False
+
+    @classmethod
+    def random(
+        cls,
+        *,
+        exact_bits: Optional[int] = None,
+        max_bits: Optional[int] = None,
+        randfunc: Optional[RandFunc] = None,
+    ) -> IntegerBase:
+        """Generate a random natural integer of a certain size.
+
+        :Keywords:
+          exact_bits : positive integer
+            The length in bits of the resulting random Integer number.
+            The number is guaranteed to fulfil the relation:
+
+                2^bits > result >= 2^(bits - 1)
+
+          max_bits : positive integer
+            The maximum length in bits of the resulting random Integer number.
+            The number is guaranteed to fulfil the relation:
+
+                2^bits > result >=0
+
+          randfunc : callable
+            A function that returns a random byte string. The length of the
+            byte string is passed as parameter. Optional.
+            If not provided (or ``None``), randomness is read from the system RNG.
+
+        :Return: a Integer object
+        """
+
+        if randfunc is None:
+            randfunc = Random.get_random_bytes
+
+        if exact_bits is not None:
+            if max_bits is not None:
+                raise ValueError("'exact_bits' and 'max_bits' are mutually exclusive")
+            bits = exact_bits
+        elif max_bits is not None:
+            bits = max_bits
+        else:
+            raise ValueError("Either 'exact_bits' or 'max_bits' must be specified")
+
+        bytes_needed = ((bits - 1) // 8) + 1
+        significant_bits_msb = 8 - (bytes_needed * 8 - bits)
+        msb = randfunc(1)[0]
+        if exact_bits is not None:
+            msb |= 1 << (significant_bits_msb - 1)
+        msb &= (1 << significant_bits_msb) - 1
+
+        return cls.from_bytes(bytes([msb]) + randfunc(bytes_needed - 1))
+
+    @classmethod
+    def random_range(
+        cls,
+        *,
+        min_inclusive: Optional[Union[IntegerBase, int]] = None,
+        max_inclusive: Optional[Union[IntegerBase, int]] = None,
+        max_exclusive: Optional[Union[IntegerBase, int]] = None,
+        randfunc: Optional[RandFunc] = None,
+    ) -> IntegerBase:
+        max_inclusive = max_exclusive - 1
+
+        if randfunc is None:
+            randfunc = Random.get_random_bytes
+
+        norm_maximum = cls(max_inclusive) - min_inclusive
+        bits_needed = norm_maximum.size_in_bits()
+
+        while True:
+            norm_candidate = cls.random(max_bits=bits_needed, randfunc=randfunc)
+            if norm_candidate <= norm_maximum:
+                return norm_candidate + min_inclusive
+
 
 class IntegerNat(IntegerBase):
     """A natural number (0, 1, 2, ...), with constant-time arithmetic"""
@@ -109,37 +191,11 @@ class IntegerNat(IntegerBase):
         other = self._conv(term)
         return _lib.nat_cmp(self._p.get(), other._p.get())
 
-    def __eq__(self, term: object) -> bool:
-        if term is None:
-            return False
-        try:
-            return self._cmp(term) == 0
-        except (TypeError, ValueError):
-            return NotImplemented
-
-    def __ne__(self, term: object) -> bool:
-        result = self.__eq__(term)
-        if result is NotImplemented:
-            return result
-        return not result
-
-    def __lt__(self, term: IntLike) -> bool:
-        return self._cmp(term) < 0
 
     def __le__(self, term: IntLike) -> bool:
         return self._cmp(term) <= 0
 
-    def __gt__(self, term: IntLike) -> bool:
-        return self._cmp(term) > 0
 
-    def __ge__(self, term: IntLike) -> bool:
-        return self._cmp(term) >= 0
-
-    def __bool__(self) -> bool:
-        return not self._is_zero()
-
-    def is_negative(self) -> bool:
-        return False
 
     # Arithmetic operations
 
@@ -184,16 +240,6 @@ class IntegerNat(IntegerBase):
 
     __rmul__ = __mul__
 
-    def __floordiv__(self, divisor: IntLike) -> IntegerNat:
-        public = self._is_public_with(divisor)
-        divisor = self._conv(divisor)
-        if divisor._is_zero():
-            raise ZeroDivisionError("Division by zero")
-        result = IntegerNat._make(self._bits)
-        _check(_lib.nat_divmod(result._p.get(), null_pointer, self._p.get(), divisor._p.get()), "nat_divmod")
-        result._public = public
-        return result
-
     def __mod__(self, divisor: IntLike) -> IntegerNat:
         public = self._is_public_with(divisor)
         divisor = self._check_modulus(divisor)
@@ -217,142 +263,8 @@ class IntegerNat(IntegerBase):
             raise zero_error("%s cannot be zero" % name)
         return modulus
 
-    def inplace_pow(self, exponent: IntLike, modulus: Optional[IntLike] = None) -> IntegerNat:
-        if isinstance(exponent, int) and exponent < 0:
-            raise ValueError("Exponent must not be negative")
-        exponent = self._conv(exponent)
-
-        if modulus is None:
-            # The exponent must be public: it is converted to a Python int
-            exp_value = int(exponent)
-            result = IntegerNat(1)
-            for bit in bin(exp_value)[2:]:
-                result = result * result
-                if bit == "1":
-                    result = result * self
-            return self._adopt(result)
-
-        modulus = self._check_modulus(modulus)
-        result = IntegerNat._make(modulus._bits)
-        _check(
-            _lib.nat_powmod(
-                result._p.get(), self._p.get(), exponent._p.get(), c_size_t(exponent._bits), modulus._p.get()
-            ),
-            "nat_powmod",
-        )
-        return self._adopt(result)
-
-    def __pow__(self, exponent: IntLike, modulus: Optional[IntLike] = None) -> IntegerNat:
-        result = IntegerNat(self)
-        return result.inplace_pow(exponent, modulus)
-
-    def __abs__(self) -> IntegerNat:
-        return IntegerNat(self)
-
-    def sqrt(self, modulus: Optional[IntLike] = None) -> IntegerNat:
-        if modulus is None:
-            result = IntegerNat._make(self._bits // 2 + 1)
-            _check(_lib.nat_isqrt(result._p.get(), self._p.get()), "nat_isqrt")
-            return result
-
-        modulus = self._check_modulus(modulus, zero_error=ValueError)
-        return IntegerNat(self._tonelli_shanks(self % modulus, modulus))
-
-    def __iadd__(self, term: IntLike) -> IntegerNat:
-        return self._adopt(self + term)
-
-    def __isub__(self, term: IntLike) -> IntegerNat:
-        return self._adopt(self - term)
-
-    def __imul__(self, term: IntLike) -> IntegerNat:
-        return self._adopt(self * term)
-
-    def __imod__(self, term: IntLike) -> IntegerNat:
-        return self._adopt(self % term)
-
-    # Boolean/bit operations
-
-    def __and__(self, term: IntLike) -> IntegerNat:
-        term = self._conv(term)
-        result = IntegerNat._make(min(self._bits, term._bits))
-        _check(_lib.nat_and(result._p.get(), self._p.get(), term._p.get()), "nat_and")
-        return result
-
-    def __or__(self, term: IntLike) -> IntegerNat:
-        term = self._conv(term)
-        result = IntegerNat._make(max(self._bits, term._bits))
-        _check(_lib.nat_or(result._p.get(), self._p.get(), term._p.get()), "nat_or")
-        return result
-
-    def __rshift__(self, pos: IntLike) -> IntegerNat:
-        count = self._shift_count(pos)
-        if count >= self._bits:
-            return IntegerNat(0)
-        result = IntegerNat._make(self._bits - count)
-        _check(_lib.nat_shr(result._p.get(), self._p.get(), c_size_t(count)), "nat_shr")
-        return result
-
-    def __irshift__(self, pos: IntLike) -> IntegerNat:
-        return self._adopt(self >> pos)
-
-    def __lshift__(self, pos: IntLike) -> IntegerNat:
-        count = self._shift_count(pos)
-        if self._bits + count > _MAX_BITS:
-            raise ValueError("Incorrect shift count")
-        result = IntegerNat._make(self._bits + count)
-        _check(_lib.nat_shl(result._p.get(), self._p.get(), c_size_t(count)), "nat_shl")
-        return result
-
-    def __ilshift__(self, pos: IntLike) -> IntegerNat:
-        return self._adopt(self << pos)
-
-    def get_bit(self, n: IntLike) -> bool:
-        bit = int(n)
-        if bit < 0:
-            raise ValueError("negative bit count")
-        if bit >= 64 * self._nw():
-            return False
-        return bool(_lib.nat_get_bit(self._p.get(), c_size_t(bit)))
-
-    # Extra
-
-    def is_odd(self) -> bool:
-        return bool(_lib.nat_is_odd(self._p.get()))
-
-    def is_even(self) -> bool:
-        return not self.is_odd()
-
     def size_in_bits(self) -> int:
         return max(1, _lib.nat_bit_length(self._p.get()))
-
-    def size_in_bytes(self) -> int:
-        return (self.size_in_bits() - 1) // 8 + 1
-
-    def is_perfect_square(self) -> bool:
-        root = self.sqrt()
-        return root * root == self
-
-    def fail_if_divisible_by(self, small_prime: IntLike) -> None:
-        divisor = int(small_prime)
-        if 0 < divisor < 2**32:
-            remainder = IntegerNat._make(64)
-            _check(
-                _lib.nat_mod_small(remainder._p.get(), self._p.get(), c_ulonglong(divisor)), "nat_mod_small"
-            )
-        else:
-            remainder = self % divisor
-        if remainder._is_zero():
-            raise ValueError("Value is composite")
-
-    def multiply_accumulate(self, a: IntLike, b: IntLike) -> IntegerNat:
-        a = self._conv(a)
-        b = self._conv(b)
-        result = IntegerNat._make(max(self._bits, a._bits + b._bits) + 1)
-        _check(_lib.nat_muladd(result._p.get(), self._p.get(), a._p.get(), b._p.get()), "nat_muladd")
-        return self._adopt(result)
-
-    def set(self, source: IntLike) -> IntegerNat:
-        return self._adopt(IntegerNat(source))
 
     def inplace_inverse(self, modulus: IntLike) -> IntegerNat:
         public = self._is_public_with(modulus)
@@ -368,56 +280,6 @@ class IntegerNat(IntegerBase):
     def inverse(self, modulus: IntLike) -> IntegerNat:
         result = IntegerNat(self)
         return result.inplace_inverse(modulus)
-
-    def gcd(self, term: IntLike) -> IntegerNat:
-        term = self._conv(term)
-        result = IntegerNat._make(max(self._bits, term._bits))
-        _check(_lib.nat_gcd(result._p.get(), self._p.get(), term._p.get()), "nat_gcd")
-        return result
-
-    def lcm(self, term: IntLike) -> IntegerNat:
-        term = self._conv(term)
-        gcd = self.gcd(term)
-        # Only the fact that both numbers are zero leaks
-        if gcd._is_zero():
-            return IntegerNat(0)
-        return (self * term) // gcd
-
-    @staticmethod
-    def jacobi_symbol(a: IntLike, n: IntLike) -> int:
-        n = IntegerNat._check_modulus(n, "n", zero_error=ValueError)
-        if not n.is_odd():
-            raise ValueError("n must be odd for the Jacobi symbol")
-
-        # A negative a can only be a (public) Python int
-        negate = 0
-        if isinstance(a, int) and a < 0:
-            a, negate = -a, 1
-        a = IntegerNat._conv(a)
-
-        result = IntegerNat._make(64)
-        _check(_lib.nat_jacobi(result._p.get(), a._p.get(), n._p.get(), negate), "nat_jacobi")
-        return int(result) - 1
-
-    @staticmethod
-    def _mult_modulo_bytes(term1: IntLike, term2: IntLike, modulus: IntLike) -> bytes:
-        modulus = IntegerNat._check_modulus(modulus)
-        if not modulus.is_odd():
-            raise ValueError("Odd modulus is required")
-
-        # Python ints may be negative
-        if isinstance(term1, int):
-            term1 = term1 % int(modulus)
-        if isinstance(term2, int):
-            term2 = term2 % int(modulus)
-        term1 = IntegerNat._conv(term1)
-        term2 = IntegerNat._conv(term2)
-
-        result = IntegerNat._make(modulus._bits)
-        _check(
-            _lib.nat_mulmod(result._p.get(), term1._p.get(), term2._p.get(), modulus._p.get()), "nat_mulmod"
-        )
-        return result.to_bytes(modulus.size_in_bytes())
 
 def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
 
@@ -952,7 +814,6 @@ def generate(*, curve) -> EccKey:
     new_key = EccKey(curve=curve_name, d=d)
 
     return new_key
-
 
 def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
     params = cast(dict[str, Any], kwargs)
