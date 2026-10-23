@@ -12,7 +12,7 @@ import random, secrets
 import cffi
 import operator
 from abc import ABC
-from Crypto.Math._IntegerNat import _new_nat, _check, _lib
+from Crypto.Math._IntegerNat import _new_nat, _lib
 from Crypto.PublicKey._point import _curves
 
 null_pointer = cffi.FFI().NULL
@@ -93,7 +93,7 @@ class IntegerNat(IntegerBase):
         nbytes = max(1, (value.bit_length() + 7) // 8)
         self._alloc(max(value.bit_length(), _min_bits))
         data = value.to_bytes(nbytes, "little")
-        _check(_lib.nat_from_bytes(self._p.get(), data, nbytes, 1), "nat_from_bytes")
+        _lib.nat_from_bytes(self._p.get(), data, nbytes, 1)
 
     # Internal helpers
     def _alloc(self, bits: int) -> None:
@@ -128,7 +128,7 @@ class IntegerNat(IntegerBase):
     def __int__(self) -> int:
         nbytes = 8 * self._nw()
         buf = create_string_buffer(nbytes)
-        _check(_lib.nat_to_bytes(buf, nbytes, self._p.get(), 1), "nat_to_bytes")
+        _lib.nat_to_bytes(buf, nbytes, self._p.get(), 1)
         return int.from_bytes(get_raw_buffer(buf), "little")
 
     def __index__(self) -> int:
@@ -142,8 +142,7 @@ class IntegerNat(IntegerBase):
 
     def to_bytes(self, block_size: Optional[int] = 0, byteorder: str = "big") -> bytes:
         buf = create_string_buffer(block_size)
-        result = _lib.nat_to_bytes(buf, block_size, self._p.get(), int(byteorder == "little"))
-        _check(result, "nat_to_bytes")
+        _lib.nat_to_bytes(buf, block_size, self._p.get(), int(byteorder == "little"))
         return get_raw_buffer(buf)
 
     @classmethod
@@ -158,12 +157,9 @@ class IntegerNat(IntegerBase):
         length = len(byte_string)
         result = cls._make(max(8 * length, _min_bits))
         result._public = public
-        _check(
-            _lib.nat_from_bytes(
-                result._p.get(), c_uint8_ptr(byte_string), length, int(byteorder == "little")
-            ),
-            "nat_from_bytes",
-        )
+        _lib.nat_from_bytes(
+            result._p.get(), c_uint8_ptr(byte_string), length, int(byteorder == "little")
+            )
         return result
 
     # Relations
@@ -190,7 +186,7 @@ class IntegerNat(IntegerBase):
         except TypeError:
             return NotImplemented
         result = IntegerNat._make(max(self._bits, term._bits) + 1)
-        _check(_lib.nat_add(result._p.get(), self._p.get(), term._p.get()), "nat_add")
+        _lib.nat_add(result._p.get(), self._p.get(), term._p.get())
         result._public = public
         return result
 
@@ -203,8 +199,7 @@ class IntegerNat(IntegerBase):
         except TypeError:
             return NotImplemented
         result = IntegerNat._make(max(self._bits, term._bits))
-        error = _lib.nat_sub(result._p.get(), self._p.get(), term._p.get())
-        _check(error, "nat_sub")
+        _lib.nat_sub(result._p.get(), self._p.get(), term._p.get())
         result._public = public
         return result
 
@@ -216,7 +211,7 @@ class IntegerNat(IntegerBase):
         except TypeError:
             return NotImplemented
         result = IntegerNat._make(self._bits + factor._bits)
-        _check(_lib.nat_mul(result._p.get(), self._p.get(), factor._p.get()), "nat_mul")
+        _lib.nat_mul(result._p.get(), self._p.get(), factor._p.get())
         result._public = public
         return result
 
@@ -226,7 +221,7 @@ class IntegerNat(IntegerBase):
         public = self._is_public_with(divisor)
         divisor = self._check_modulus(divisor)
         result = IntegerNat._make(divisor._bits)
-        _check(_lib.nat_divmod(null_pointer, result._p.get(), self._p.get(), divisor._p.get()), "nat_divmod")
+        _lib.nat_divmod(null_pointer, result._p.get(), self._p.get(), divisor._p.get())
         result._public = public
         return result
 
@@ -252,8 +247,7 @@ class IntegerNat(IntegerBase):
         public = self._is_public_with(modulus)
         modulus = self._check_modulus(modulus)
         result = IntegerNat._make(modulus._bits)
-        error = _lib.nat_invmod(result._p.get(), self._p.get(), modulus._p.get())
-        _check(error, "nat_invmod")
+        _lib.nat_invmod(result._p.get(), self._p.get(), modulus._p.get())
         result._public = public
         return self._adopt(result)
 
