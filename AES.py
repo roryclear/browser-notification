@@ -138,18 +138,6 @@ class GcmMode:
     ) -> tuple[Optional[bytes], bytes]:
         return self.encrypt(plaintext, output=output), self.digest()
 
-def _create_gcm_cipher(factory, **kwargs):
-    key = kwargs.pop("key")
-    nonce = kwargs.pop("nonce", None)
-    mac_len = kwargs.pop("mac_len", 16)
-    threads = kwargs.pop("threads", 1)
-
-    # Not documented - only used for testing
-    use_clmul = kwargs.pop("use_clmul", True)
-    ghash_c = _ghash_portable
-
-    return GcmMode(factory, key, nonce, mac_len, kwargs, ghash_c, threads)
-
 _ghash_api = """
     int ghash_portable(uint8_t y_out[16],
                     const uint8_t block_data[],
@@ -184,7 +172,6 @@ def _create_gcm_cipher(factory, **kwargs):
     imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
     params = dict(zip(funcs, imp_funcs))
     ghash_c = GHASH_Imp(**params)
-
     return GcmMode(factory, key, nonce, mac_len, kwargs, ghash_c, threads)
 
 class VoidPointer:
