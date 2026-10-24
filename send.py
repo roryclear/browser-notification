@@ -1,13 +1,9 @@
 import json
 import base64
 import binascii
-import os
-import struct
 import time
 import copy
 import requests
-
-from typing import cast
 from urllib.parse import urlparse
 
 import DSS
@@ -110,11 +106,8 @@ if __name__ == "__main__":
         subscription_info["keys"]["auth"].encode("ascii")
     )
 
-    server_key = ECC.generate(curve="P-256")
-
     encoded_data = aes_encrypt(
         data,
-        private_key=server_key,
         dh=receiver_key,
         auth_secret=auth_key,
     )

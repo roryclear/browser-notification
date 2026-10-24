@@ -66,8 +66,9 @@ def iv(base, counter):
     (mask,) = struct.unpack("!Q", base[4:])
     return base[:4] + struct.pack("!Q", counter ^ mask)
 
-def aes_encrypt(content, private_key=None, dh=None, auth_secret=None):
+def aes_encrypt(content, dh=None, auth_secret=None):
     rs = 4096
+    private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
         cipher = new(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
         ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
