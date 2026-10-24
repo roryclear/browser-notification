@@ -172,22 +172,19 @@ _ghash_api = """
                             const void *exp_key);
 """
 
-def _get_ghash_portable():
-    lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
-    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
-    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
-    imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
-    params = dict(zip(funcs, imp_funcs))
-    return GHASH_Imp(**params)
-
-_ghash_portable = _get_ghash_portable()
-
 def _create_gcm_cipher(factory, **kwargs):
     key = kwargs.pop("key")
     nonce = kwargs.pop("nonce", None)
     mac_len = kwargs.pop("mac_len", 16)
     threads = kwargs.pop("threads", 1)
-    ghash_c = _ghash_portable
+
+    lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
+    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
+    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
+    imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
+    params = dict(zip(funcs, imp_funcs))
+    ghash_c = GHASH_Imp(**params)
+
     return GcmMode(factory, key, nonce, mac_len, kwargs, ghash_c, threads)
 
 class VoidPointer:
