@@ -1,7 +1,4 @@
 from typing import Any, Union, Optional
-from ECC import SmartPointer
-from Crypto.Util._raw_api import load_pycryptodome_raw_lib
-
 import cffi
 import os
 import struct
@@ -13,8 +10,56 @@ import copy, time
 import DSS
 from urllib.parse import urlparse
 
+from typing import Any, Union, Optional
+import os
+import struct
+import ECC
+from KDF import HKDF
+import SHA256
+import base64, json
+import copy, time
+import DSS
+from urllib.parse import urlparse
+
+
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
+
+_GF_R = 0xE1000000000000000000000000000000
+
+
+def _gf_mult(x: int, y: int) -> int:
+    z = 0
+    v = y
+    for i in range(128):
+        if (x >> (127 - i)) & 1:
+            z ^= v
+        if v & 1:
+            v = (v >> 1) ^ _GF_R
+        else:
+            v >>= 1
+    return z
+
+
+class _GHASH:
+    __slots__ = ("_h", "_last_y")
+
+    def __init__(self, subkey: bytes) -> None:
+        self._h = bytes_to_long(subkey)   # H
+        self._last_y = 0                  # Y_0 = 0
+
+    def update(self, block_data) -> "_GHASH":
+        data = bytes(block_data)
+        h = self._h
+        y = self._last_y
+        for i in range(0, len(data), 16):
+            y = _gf_mult(y ^ bytes_to_long(data[i:i + 16]), h)
+        self._last_y = y
+        return self
+
+    @property
+    def digest(self) -> bytes:
+        return long_to_bytes(self._last_y, 16)
 
 def b64urlencode(data): return base64.urlsafe_b64encode(data).replace(b"=", b"").decode("utf8")
 
@@ -155,17 +200,8 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        # todo, use counter
-        nonce=iv(nonce, counter)
-
-        lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
-        funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
-        GHASH_Imp = namedtuple("_GHash_Imp", funcs)
-        imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
-        params = dict(zip(funcs, imp_funcs))
-        ghash_c = GHASH_Imp(**params)
-        cipher = GcmMode(key, nonce, ghash_c)
-
+        nonce = iv(nonce, counter)
+        cipher = GcmMode(key, nonce)
         ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
         tag = _compute_mac(cipher)
         return ciphertext + tag
@@ -204,39 +240,13 @@ def aes_encrypt(content, headers=None):
 
     return compose_aes128gcm(salt, result, rs, keyid=public_key), headers, endpoint
 
-class _GHASH:
-    def __init__(self, subkey, ghash_c, threads=1):
-        self.ghash_c = ghash_c
-        self._threads = threads
-
-        self._exp_key = VoidPointer()
-        ghash_c.ghash_expand(subkey, self._exp_key.address_of())
-        self._exp_key = SmartPointer(self._exp_key.get())
-        self._last_y = create_string_buffer(16)
-
-    def update(self, block_data):
-        block_data = cffi.FFI().from_buffer("uint8_t[]", block_data)
-        block_data_ptr, block_data_len = block_data, len(block_data)
-        self.ghash_c.ghash(
-            self._last_y,
-            block_data_ptr,
-            block_data_len,
-            self._last_y,
-            self._exp_key.get(),
-        )
-        return self
 
 class GcmMode:
-    def __init__(
-        self,
-        key: Any,
-        nonce: Any,
-        ghash_c: Any,
-    ) -> None:
+    def __init__(self, key: Any, nonce: Any) -> None:
         self.block_size = 16
         self.nonce = bytes(nonce)
         self._key = bytes(key)
-        self._tag: Optional[bytes] = None  # Cache for MAC tag
+        self._tag: Optional[bytes] = None
 
         self._mac_len = 16
         self._no_more_assoc_data = False
@@ -244,15 +254,17 @@ class GcmMode:
         self._msg_len = 0
         hash_subkey = EcbMode(key).encrypt(b"\x00" * 16)
 
-
         j0 = self.nonce + b"\x00\x00\x00\x01"
 
-        # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = _create_ctr_cipher(key, initial_value=iv_ctr.to_bytes(4, byteorder='big', signed=False), nonce=nonce_ctr)
+        self._cipher = _create_ctr_cipher(
+            key,
+            initial_value=iv_ctr.to_bytes(4, byteorder="big", signed=False),
+            nonce=nonce_ctr,
+        )
         self._tag_cipher = _create_ctr_cipher(key, initial_value=j0, nonce=b"")
-        self._signer = _GHASH(hash_subkey, ghash_c)
+        self._signer = _GHASH(hash_subkey)
         self._cache = b""
 
     def _update(self, data):
@@ -275,12 +287,12 @@ class GcmMode:
                 data = memoryview(data)[:update_len]
             self._signer.update(data)
 
-def _compute_mac(cipher):
-    # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
+def _compute_mac(cipher: "GcmMode") -> bytes:
+    # Pad to a full block and append the length block (NIST SP 800-38D §7.1)
     cipher._update(b"\x00" * (16 - len(cipher._cache)))
     cipher._update(long_to_bytes(8 * cipher._auth_len, 8))
     cipher._update(long_to_bytes(8 * cipher._msg_len, 8))
-    s_tag = get_raw_buffer(cipher._signer._last_y)
+    s_tag = cipher._signer.digest                     # was: get_raw_buffer(...)
     cipher._tag = cipher._tag_cipher.encrypt(s_tag)[: cipher._mac_len]
     return cipher._tag
 
