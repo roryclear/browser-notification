@@ -575,12 +575,6 @@ class CtrMode:
                 if counter[i]:
                     return
 
-    def _check(self, n: int) -> None:
-        if self._bytes_processed + n > self._max_bytes:
-            raise CTRRepeatedKeyStreamError(
-                "keystream would repeat (limit %d bytes)" % self._max_bytes
-            )
-
     def _consume(self, n: int) -> bytes:
         """Advance state by n bytes; return the keystream slice."""
         out = bytearray()
@@ -598,49 +592,7 @@ class CtrMode:
         self._bytes_processed += n
         return bytes(out)
 
-    def _peek(self, offset: int, n: int) -> bytes:
-        """Compute n keystream bytes at `offset` from current position; do NOT advance."""
-        out = bytearray()
-        rem = n
-
-        # 1) Portion that lies inside the current partial block
-        if self._used > 0:
-            avail = self.block_size - self._used
-            take = min(rem, max(0, avail - offset))
-            if take:
-                start = self._used + offset
-                out += self._keystream[start : start + take]
-                rem -= take
-                offset += take
-            if rem:
-                offset -= avail                     # now relative to next block start
-
-        # 2) Remainder: blocks starting at self._counter
-        if rem:
-            counter = bytearray(self._counter)
-            skip_blocks = offset // self.block_size
-            in_block    = offset %  self.block_size
-            for _ in range(skip_blocks):
-                self._increment_counter(counter)
-
-            while rem:
-                ks = self._cipher.encrypt_block(bytes(counter))
-                self._increment_counter(counter)
-                take = min(rem, self.block_size - in_block)
-                out += ks[in_block : in_block + take]
-                rem -= take
-                in_block = 0
-
-        return bytes(out)
-
-    # ----------------------------------------------------------------- public
-
     def encrypt(self, plaintext):
         data = bytes(plaintext)
         ks = self._consume(len(data))
         return bytes(a ^ b for a, b in zip(data, ks))
-
-class VoidPointer:
-    def __init__(self): self._pp = cffi.FFI().new("void *[1]")
-    def get(self): return self._pp[0]
-    def address_of(self): return self._pp
