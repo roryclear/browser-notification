@@ -223,17 +223,14 @@ class GcmMode:
         self,
         key: Any,
         nonce: Any,
-        mac_len: int,
-        cipher_params: dict,
         ghash_c: Any,
-        threads: int = 1,
     ) -> None:
         self.block_size = 16
         self.nonce = bytes(nonce)
         self._key = bytes(key)
         self._tag: Optional[bytes] = None  # Cache for MAC tag
 
-        self._mac_len = mac_len
+        self._mac_len = 16
         self._no_more_assoc_data = False
         self._auth_len = 0
         self._msg_len = 0
@@ -339,7 +336,7 @@ def _create_gcm_cipher(**kwargs):
     imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
     params = dict(zip(funcs, imp_funcs))
     ghash_c = GHASH_Imp(**params)
-    return GcmMode(key, nonce, 16, kwargs, ghash_c, 1)
+    return GcmMode(key, nonce, ghash_c)
 
 def _create_ctr_cipher(**kwargs):
     key = kwargs.pop("key")
