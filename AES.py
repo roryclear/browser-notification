@@ -384,122 +384,181 @@ class EcbMode:
 
 from ECC import long_to_bytes
 
-raw_ctr_lib = load_pycryptodome_raw_lib(
-    "Crypto.Cipher._raw_ctr",
-    """
-                    int CTR_start_operation(void *cipher,
-                                            uint8_t   initialCounterBlock[],
-                                            size_t    initialCounterBlock_len,
-                                            size_t    prefix_len,
-                                            unsigned  counter_len,
-                                            unsigned  littleEndian,
-                                            void **pResult);
-                    int CTR_encrypt(void *ctrState,
-                                    const uint8_t *in,
-                                    uint8_t *out,
-                                    size_t data_len);
-                    int CTR_decrypt(void *ctrState,
-                                    const uint8_t *in,
-                                    uint8_t *out,
-                                    size_t data_len);
-                    int CTR_encrypt_at(const void *ctrState,
-                                       const uint8_t *in,
-                                       uint8_t *out,
-                                       size_t offset,
-                                       size_t data_len);
-                    int CTR_skip(void *ctrState,
-                                 size_t data_len);
-                    int CTR_check(const void *ctrState,
-                                  size_t data_len);
-                    int CTR_stop_operation(void *ctrState);""",
-)
+class CTRRepeatedKeyStreamError(Exception):
+    """Raised when the CTR keystream would wrap around (NIST SP 800-38A limit)."""
+
 
 class CtrMode:
     def __init__(
         self,
-        block_cipher: SmartPointer,
-        initial_counter_block: Any,
+        block_cipher,                 # BlockState (from the AES answer)
+        initial_counter_block,
         prefix_len: int,
         counter_len: int,
         little_endian: bool,
     ) -> None:
-        state = VoidPointer()
-        initial_counter_block_ptr, initial_counter_block_len = initial_counter_block, len(initial_counter_block)
-        raw_ctr_lib.CTR_start_operation(
-            block_cipher.get(),
-            initial_counter_block_ptr,
-            initial_counter_block_len,
-            prefix_len,
-            counter_len,
-            little_endian,
-            state.address_of(),
-        )
-        self._state = SmartPointer(state.get())
+        if prefix_len + counter_len > len(initial_counter_block):
+            raise ValueError("prefix_len + counter_len exceeds block length")
 
-        self.block_size = len(initial_counter_block)
-        
-    def encrypt(
-        self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
-    ) -> Optional[bytes]:
-        return self._process(plaintext, output, "encrypting")
+        self._cipher      = block_cipher
+        self.block_size   = len(initial_counter_block)
+        self._counter     = bytearray(initial_counter_block)
+        self._prefix_len  = prefix_len
+        self._counter_len = counter_len
+        self._little_endian = little_endian
 
+        self._keystream   = None   # bytes: current block's keystream (when _used > 0)
+        self._used        = 0      # bytes consumed from current block
 
-    def _process(
-        self, data, output: Optional[Union[bytearray, memoryview]], what: str
-    ) -> Optional[bytes]:
-        result_buffer = create_output_buffer(len(data))
+        self._bytes_processed = 0
+        self._max_bytes = (1 << (8 * counter_len)) * self.block_size
 
-        with result_buffer as result_ptr:
-            data_ptr, data_len = data, len(data)
-            raw_ctr_lib.CTR_encrypt(self._state.get(), data_ptr, result_ptr, data_len)
+    # ------------------------------------------------------------------ helpers
 
-        return get_raw_buffer(result_buffer)
+    def _increment_counter(self, counter: bytearray) -> None:
+        p, c = self._prefix_len, self._counter_len
+        if self._little_endian:
+            for k in range(c):
+                counter[p + k] = (counter[p + k] + 1) & 0xff
+                if counter[p + k]:
+                    return
+        else:
+            for k in range(c):
+                i = p + c - 1 - k
+                counter[i] = (counter[i] + 1) & 0xff
+                if counter[i]:
+                    return
+
+    def _check(self, n: int) -> None:
+        if self._bytes_processed + n > self._max_bytes:
+            raise CTRRepeatedKeyStreamError(
+                "keystream would repeat (limit %d bytes)" % self._max_bytes
+            )
+
+    def _consume(self, n: int) -> bytes:
+        """Advance state by n bytes; return the keystream slice."""
+        out = bytearray()
+        rem = n
+        while rem:
+            if self._used == 0:
+                self._keystream = self._cipher.encrypt_block(bytes(self._counter))
+                self._increment_counter(self._counter)
+            take = min(rem, self.block_size - self._used)
+            out += self._keystream[self._used : self._used + take]
+            self._used += take
+            rem -= take
+            if self._used == self.block_size:
+                self._used, self._keystream = 0, None
+        self._bytes_processed += n
+        return bytes(out)
+
+    def _peek(self, offset: int, n: int) -> bytes:
+        """Compute n keystream bytes at `offset` from current position; do NOT advance."""
+        out = bytearray()
+        rem = n
+
+        # 1) Portion that lies inside the current partial block
+        if self._used > 0:
+            avail = self.block_size - self._used
+            take = min(rem, max(0, avail - offset))
+            if take:
+                start = self._used + offset
+                out += self._keystream[start : start + take]
+                rem -= take
+                offset += take
+            if rem:
+                offset -= avail                     # now relative to next block start
+
+        # 2) Remainder: blocks starting at self._counter
+        if rem:
+            counter = bytearray(self._counter)
+            skip_blocks = offset // self.block_size
+            in_block    = offset %  self.block_size
+            for _ in range(skip_blocks):
+                self._increment_counter(counter)
+
+            while rem:
+                ks = self._cipher.encrypt_block(bytes(counter))
+                self._increment_counter(counter)
+                take = min(rem, self.block_size - in_block)
+                out += ks[in_block : in_block + take]
+                rem -= take
+                in_block = 0
+
+        return bytes(out)
+
+    # ----------------------------------------------------------------- public
+
+    def encrypt(self, plaintext, output=None):
+        data = bytes(plaintext)
+        self._check(len(data))
+        ks = self._consume(len(data))
+        result = bytes(a ^ b for a, b in zip(data, ks))
+        if output is not None:
+            output[:] = result
+            return None
+        return result
+
+    def decrypt(self, ciphertext, output=None):          # CTR is symmetric
+        return self.encrypt(ciphertext, output=output)
+
+    def encrypt_at(self, plaintext, offset, output=None):
+        """Peek at `offset` from current position; state is unchanged."""
+        data = bytes(plaintext)
+        if self._bytes_processed + offset + len(data) > self._max_bytes:
+            raise CTRRepeatedKeyStreamError(
+                "keystream would repeat (limit %d bytes)" % self._max_bytes
+            )
+        ks = self._peek(offset, len(data))
+        result = bytes(a ^ b for a, b in zip(data, ks))
+        if output is not None:
+            output[:] = result
+            return None
+        return result
+
+    def skip(self, n: int) -> None:
+        self._check(n)
+        self._consume(n)                                  # discard keystream
+
+    def check(self, n: int) -> bool:
+        return self._bytes_processed + n <= self._max_bytes
 
 def _create_ctr_cipher(factory, **kwargs):
-    threads = kwargs.pop("threads", 1)
+    kwargs.pop("threads", None)                     # ignored
+    key = kwargs.pop("key")
 
-    cipher_state = factory._create_base_cipher(kwargs)
+    cipher_state = BlockState(key)
 
-    counter = kwargs.pop("counter", None)
-    nonce = kwargs.pop("nonce", None)
+    counter       = kwargs.pop("counter", None)
+    nonce         = kwargs.pop("nonce", None)
     initial_value = kwargs.pop("initial_value", None)
+
     if counter is None:
-
-        # What is not nonce is counter
         counter_len = factory.block_size - len(nonce)
-
         if initial_value is None:
             initial_value = 0
-
         if isinstance(initial_value, int):
             initial_counter_block = nonce + long_to_bytes(initial_value, counter_len)
         else:
             if len(initial_value) != counter_len:
-                raise ValueError(
-                    "Incorrect length for counter byte string (%d bytes, expected %d)"
-                    % (len(initial_value), counter_len)
-                )
+                raise ValueError("Incorrect length for counter byte string")
             initial_counter_block = nonce + initial_value
+        return CtrMode(cipher_state, initial_counter_block,
+                       len(nonce), counter_len, False)
 
-        return CtrMode(
-            cipher_state,
-            initial_counter_block,
-            len(nonce),  # prefix
-            counter_len,
-            False,  # little_endian
-        )
-    _counter = dict(counter)
-    counter_len = _counter.pop("counter_len")
-    prefix = _counter.pop("prefix")
-    suffix = _counter.pop("suffix")
-    initial_value = _counter.pop("initial_value")
-    little_endian = _counter.pop("little_endian")
-    words = []
-    words += [b"\x00"] * max(0, counter_len - len(words))
+    # `counter` dict path (kept for API compatibility)
+    _c = dict(counter)
+    counter_len = _c.pop("counter_len")
+    prefix      = _c.pop("prefix")
+    suffix      = _c.pop("suffix")
+    _c.pop("initial_value")                         # was ignored in the original
+    little_endian = _c.pop("little_endian")
+
+    zeros = b"\x00" * counter_len
     if not little_endian:
-        words.reverse()
-    initial_counter_block = prefix + b"".join(words) + suffix
-    return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian, threads)
+        zeros = zeros[::-1]
+    initial_counter_block = prefix + zeros + suffix
+    return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian)
 
 
 def _create_ecb_cipher(factory, **kwargs):
@@ -530,31 +589,10 @@ MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
 
-_cproto = """
-        int AES_start_operation(const uint8_t key[],
-                                size_t key_len,
-                                void **pResult);
-        int AES_encrypt(const void *state,
-                        const uint8_t *in,
-                        uint8_t *out,
-                        size_t data_len);
-        int AES_decrypt(const void *state,
-                        const uint8_t *in,
-                        uint8_t *out,
-                        size_t data_len);
-        int AES_stop_operation(void *state);
-        """
-
-_raw_aes_lib = load_pycryptodome_raw_lib("Crypto.Cipher._raw_aes", _cproto)
 
 def _create_base_cipher(dict_parameters):
-    key = dict_parameters.pop("key")
-    start_operation = _raw_aes_lib.AES_start_operation
-
-    cipher = VoidPointer()
-    key_ptr, key_len = key, len(key)
-    start_operation(key_ptr, key_len, cipher.address_of())
-    return SmartPointer(cipher.get())
+    from_ = dict_parameters.pop("key")
+    return BlockState(from_)          # pure-Python AES
 
 def new(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any:
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
