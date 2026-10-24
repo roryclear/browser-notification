@@ -10,9 +10,68 @@ import ECC
 from KDF import HKDF
 import SHA256
 import base64, json
+import copy, time
+import DSS
 
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
+
+def b64urlencode(data): return base64.urlsafe_b64encode(data).replace(b"=", b"").decode("utf8")
+
+def sign(claims, key):
+    header = b64urlencode(b'{"typ":"JWT","alg":"ES256"}')
+    claims = b64urlencode(
+        json.dumps(
+            claims, separators=(",", ":"), sort_keys=True
+        ).encode("utf8")
+    )
+
+    token = "{}.{}".format(header, claims)
+
+    signer = DSS.new(key, "fips-186-3", encoding="binary")
+
+    # todo patch throw in lib
+    import hashlib
+    signature = signer.sign(hashlib.sha256(token.encode("utf8")))
+
+    return "{}.{}".format(token, b64urlencode(signature))
+
+class Vapid:
+    def __init__(self, private_key):
+        self._schema = "vapid"
+        self.conf = {}
+        self._private_key = private_key
+        self._public_key = private_key.public_key()
+
+    @classmethod
+    def from_pem(cls, private_key):
+        return cls(ECC.import_key(private_key))
+
+    @classmethod
+    def from_der(cls, private_key):
+        der = b64urldecode(private_key)
+        return cls(ECC.import_key(der))
+
+    @classmethod
+    def from_file(cls, private_key_file=None):
+        with open(private_key_file, "rb") as f:
+            return cls.from_pem(f.read())
+
+    def _base_sign(self, claims):
+        cclaims = copy.deepcopy(claims)
+        cclaims["exp"] = int(time.time()) + 86400
+        return cclaims
+
+    def sign(self, claims):
+        token = sign(self._base_sign(claims), self._private_key)
+
+        public_key = self._public_key.export_key(format="SEC1")
+
+        return {
+            "Authorization": "{} t={},k={}".format(
+                self._schema, token, b64urlencode(public_key)
+            )
+        }
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
     result = cffi.FFI().new("uint8_t[]", init_or_size)
