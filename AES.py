@@ -156,7 +156,7 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        cipher = new(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
+        cipher = new_cipher(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
         ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
         return ciphertext + tag
 
@@ -239,16 +239,15 @@ class GcmMode:
         self._no_more_assoc_data = False
         self._auth_len = 0
         self._msg_len = 0
-        hash_subkey = factory.new(key, self._factory.MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
+        hash_subkey = factory.new_cipher(key, self._factory.MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
 
-        # Step 2 - Compute J0
-        if len(self.nonce) == 12:
-            j0 = self.nonce + b"\x00\x00\x00\x01"
+
+        j0 = self.nonce + b"\x00\x00\x00\x01"
 
         # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = factory.new(
+        self._cipher = factory.new_cipher(
             key,
             self._factory.MODE_CTR,
             initial_value=iv_ctr,
@@ -257,9 +256,8 @@ class GcmMode:
             **cipher_params,
         )
         self._signer = _GHASH(hash_subkey, ghash_c)
-        self._tag_cipher = factory.new(key, self._factory.MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
+        self._tag_cipher = factory.new_cipher(key, self._factory.MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
         self._cache = b""
-
 
     def _update(self, data):
         if len(self._cache) > 0:
@@ -769,7 +767,7 @@ def _create_base_cipher(dict_parameters):
     from_ = dict_parameters.pop("key")
     return BlockState(from_)          # pure-Python AES
 
-def new(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any:
+def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any:
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
 
 # Size of a data block (in bytes)
