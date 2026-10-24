@@ -156,7 +156,7 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        cipher = new_cipher(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
+        cipher = _create_cipher(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
         ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
         return ciphertext + tag
 
@@ -237,7 +237,7 @@ class GcmMode:
         self._no_more_assoc_data = False
         self._auth_len = 0
         self._msg_len = 0
-        hash_subkey = new_cipher(key, MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
+        hash_subkey = _create_cipher(key, MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
 
 
         j0 = self.nonce + b"\x00\x00\x00\x01"
@@ -245,7 +245,7 @@ class GcmMode:
         # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = new_cipher(
+        self._cipher = _create_cipher(
             key,
             MODE_CTR,
             initial_value=iv_ctr,
@@ -254,7 +254,7 @@ class GcmMode:
             **cipher_params,
         )
         self._signer = _GHASH(hash_subkey, ghash_c)
-        self._tag_cipher = new_cipher(key, MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
+        self._tag_cipher = _create_cipher(key, MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
         self._cache = b""
 
     def _update(self, data):
@@ -756,8 +756,6 @@ Buffer = Union[bytes, bytearray, memoryview]
 MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
-
-def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any: return _create_cipher(key, mode, **kwargs)
 
 # Size of a data block (in bytes)
 block_size: int = 16
