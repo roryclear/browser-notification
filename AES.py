@@ -242,9 +242,9 @@ class GcmMode:
         # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = _create_ctr_cipher(key, initial_value=iv_ctr, nonce=nonce_ctr)
-        self._signer = _GHASH(hash_subkey, ghash_c)
+        self._cipher = _create_ctr_cipher(key, initial_value=iv_ctr.to_bytes(4, byteorder='big', signed=False), nonce=nonce_ctr)
         self._tag_cipher = _create_ctr_cipher(key, initial_value=j0, nonce=b"")
+        self._signer = _GHASH(hash_subkey, ghash_c)
         self._cache = b""
 
     def _update(self, data):
@@ -332,15 +332,9 @@ def _create_gcm_cipher(key=None, nonce=None):
 
 def _create_ctr_cipher(key, initial_value, nonce):
     cipher_state = BlockState(key)
-
     # factory block size 16
     counter_len = 16 - len(nonce)
-    if isinstance(initial_value, int):
-        initial_counter_block = nonce + long_to_bytes(initial_value, counter_len)
-    else:
-        if len(initial_value) != counter_len:
-            raise ValueError("Incorrect length for counter byte string")
-        initial_counter_block = nonce + initial_value
+    initial_counter_block = nonce + initial_value
     return CtrMode(cipher_state, initial_counter_block,
                     len(nonce), counter_len, False)
 
