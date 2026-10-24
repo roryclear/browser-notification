@@ -762,11 +762,6 @@ MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
 
-
-def _create_base_cipher(dict_parameters):
-    from_ = dict_parameters.pop("key")
-    return BlockState(from_)          # pure-Python AES
-
 def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any:
     return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
 
