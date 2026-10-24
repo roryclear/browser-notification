@@ -12,6 +12,7 @@ import SHA256
 import base64, json
 import copy, time
 import DSS
+from urllib.parse import urlparse
 
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
@@ -141,6 +142,17 @@ def aes_encrypt(content, headers=None):
         subscription_info["keys"]["auth"].encode("ascii")
     )
 
+    endpoint = subscription_info["endpoint"]
+    url = urlparse(endpoint)
+
+    vapid_claims = {
+        "sub": "mailto:fake@fake.invalid",
+        "aud": f"{url.scheme}://{url.netloc}",
+    }
+
+    vv = Vapid.from_file("vapid_private.pem")
+    headers = vv.sign(vapid_claims)
+
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
@@ -180,7 +192,7 @@ def aes_encrypt(content, headers=None):
 
     headers.update({"Content-Encoding": "aes128gcm", "TTL": "60",})
 
-    return compose_aes128gcm(salt, result, rs, keyid=public_key), headers
+    return compose_aes128gcm(salt, result, rs, keyid=public_key), headers, endpoint
 
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):
