@@ -267,11 +267,6 @@ class GcmMode:
                 data = memoryview(data)[:update_len]
             self._signer.update(data)
 
-    def _pad_cache_and_update(self):
-        len_cache = len(self._cache)
-        if len_cache > 0:
-            self._update(b"\x00" * (16 - len_cache))
-
     def encrypt(
         self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
     ) -> Optional[bytes]:
@@ -286,7 +281,7 @@ class GcmMode:
 
     def _compute_mac(self):
         # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
-        self._pad_cache_and_update()
+        self._update(b"\x00" * (16 - len(self._cache)))
         self._update(long_to_bytes(8 * self._auth_len, 8))
         self._update(long_to_bytes(8 * self._msg_len, 8))
         s_tag = self._signer.digest()
