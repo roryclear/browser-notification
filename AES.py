@@ -179,41 +179,208 @@ class VoidPointer:
     def get(self): return self._pp[0]
     def address_of(self): return self._pp
 
-Buffer = Union[bytes, bytearray, memoryview]
+SBOX = [
+    0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+    0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+    0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+    0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+    0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+    0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+    0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+    0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+    0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+    0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+    0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+    0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+    0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+    0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+    0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+    0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16,
+]
 
-raw_ecb_lib = load_pycryptodome_raw_lib(
-    "Crypto.Cipher._raw_ecb",
-    """
-                    int ECB_start_operation(void *cipher,
-                                            void **pResult);
-                    int ECB_encrypt(void *ecbState,
-                                    const uint8_t *in,
-                                    uint8_t *out,
-                                    size_t data_len);
-                    int ECB_decrypt(void *ecbState,
-                                    const uint8_t *in,
-                                    uint8_t *out,
-                                    size_t data_len);
-                    int ECB_stop_operation(void *state);
-                    """,
-)
+def _gmul(a, b):
+    p = 0
+    for _ in range(8):
+        if b & 1:
+            p ^= a
+        hi = a & 0x80
+        a = (a << 1) & 0xff
+        if hi:
+            a ^= 0x1b
+        b >>= 1
+    return p
 
+_M2  = [_gmul(x, 2)  for x in range(256)]
+_M3  = [_gmul(x, 3)  for x in range(256)]
+_M9  = [_gmul(x, 9)  for x in range(256)]
+_M11 = [_gmul(x, 11) for x in range(256)]
+_M13 = [_gmul(x, 13) for x in range(256)]
+_M14 = [_gmul(x, 14) for x in range(256)]
+
+Te0 = [( _M2[s]<<24)|(s<<16)|(s<<8)| _M3[s] for s in SBOX]
+Te1 = [( _M3[s]<<24)|(_M2[s]<<16)|(s<<8)| s     for s in SBOX]
+Te2 = [( s<<24)    |(_M3[s]<<16)|(_M2[s]<<8)| s for s in SBOX]
+Te3 = [( s<<24)    |(s<<16)    |(_M3[s]<<8)|_M2[s] for s in SBOX]
+Te4 = [( s<<24)|(s<<16)|(s<<8)| s for s in SBOX]
+
+RCON = [0x01000000,0x02000000,0x04000000,0x08000000,
+        0x10000000,0x20000000,0x40000000,0x80000000,
+        0x1B000000,0x36000000]
+
+def _ld32(b, o=0):
+    return (b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3]
+
+def _st32(b, v, o=0):
+    b[o]   = (v >> 24) & 0xff
+    b[o+1] = (v >> 16) & 0xff
+    b[o+2] = (v >>  8) & 0xff
+    b[o+3] =  v        & 0xff
+
+
+def key_setup_enc(key, key_bits):
+    rk = [0] * 60
+    i = 0
+    off = 0
+    rk[0] = _ld32(key, 0);  rk[1] = _ld32(key, 4)
+    rk[2] = _ld32(key, 8);  rk[3] = _ld32(key, 12)
+
+    if key_bits == 128:
+        while True:
+            t = rk[off+3]
+            rk[off+4] = (rk[off+0]
+                         ^ (Te4[(t>>16)&0xff] & 0xff000000)
+                         ^ (Te4[(t>> 8)&0xff] & 0x00ff0000)
+                         ^ (Te4[ t     &0xff] & 0x0000ff00)
+                         ^ (Te4[(t>>24)&0xff] & 0x000000ff)
+                         ^ RCON[i])
+            rk[off+5] = rk[off+1] ^ rk[off+4]
+            rk[off+6] = rk[off+2] ^ rk[off+5]
+            rk[off+7] = rk[off+3] ^ rk[off+6]
+            i += 1
+            if i == 10:
+                return rk, 10
+            off += 4
+
+    rk[4] = _ld32(key, 16); rk[5] = _ld32(key, 20)
+    if key_bits == 192:
+        while True:
+            t = rk[off+5]
+            rk[off+6] = (rk[off+0]
+                         ^ (Te4[(t>>16)&0xff] & 0xff000000)
+                         ^ (Te4[(t>> 8)&0xff] & 0x00ff0000)
+                         ^ (Te4[ t     &0xff] & 0x0000ff00)
+                         ^ (Te4[(t>>24)&0xff] & 0x000000ff)
+                         ^ RCON[i])
+            rk[off+7]  = rk[off+1] ^ rk[off+6]
+            rk[off+8]  = rk[off+2] ^ rk[off+7]
+            rk[off+9]  = rk[off+3] ^ rk[off+8]
+            i += 1
+            if i == 8:
+                return rk, 12
+            rk[off+10] = rk[off+4] ^ rk[off+9]
+            rk[off+11] = rk[off+5] ^ rk[off+10]
+            off += 6
+
+    rk[6] = _ld32(key, 24); rk[7] = _ld32(key, 28)
+    if key_bits == 256:
+        while True:
+            t = rk[off+7]
+            rk[off+8] = (rk[off+0]
+                         ^ (Te4[(t>>16)&0xff] & 0xff000000)
+                         ^ (Te4[(t>> 8)&0xff] & 0x00ff0000)
+                         ^ (Te4[ t     &0xff] & 0x0000ff00)
+                         ^ (Te4[(t>>24)&0xff] & 0x000000ff)
+                         ^ RCON[i])
+            rk[off+9]  = rk[off+1] ^ rk[off+8]
+            rk[off+10] = rk[off+2] ^ rk[off+9]
+            rk[off+11] = rk[off+3] ^ rk[off+10]
+            i += 1
+            if i == 7:
+                return rk, 14
+            t = rk[off+11]
+            rk[off+12] = (rk[off+4]
+                          ^ (Te4[(t>>24)&0xff] & 0xff000000)
+                          ^ (Te4[(t>>16)&0xff] & 0x00ff0000)
+                          ^ (Te4[(t>> 8)&0xff] & 0x0000ff00)
+                          ^ (Te4[ t     &0xff] & 0x000000ff))
+            rk[off+13] = rk[off+5] ^ rk[off+12]
+            rk[off+14] = rk[off+6] ^ rk[off+13]
+            rk[off+15] = rk[off+7] ^ rk[off+14]
+            off += 8
+    return rk, 0
+
+
+def rijndael_encrypt(rk, nr, pt):
+    s0 = _ld32(pt, 0)  ^ rk[0]
+    s1 = _ld32(pt, 4)  ^ rk[1]
+    s2 = _ld32(pt, 8)  ^ rk[2]
+    s3 = _ld32(pt, 12) ^ rk[3]
+
+    off = 0
+    for _ in range(nr - 1):
+        t0 = Te0[(s0>>24)&0xff] ^ Te1[(s1>>16)&0xff] ^ Te2[(s2>>8)&0xff] ^ Te3[s3&0xff] ^ rk[off+4]
+        t1 = Te0[(s1>>24)&0xff] ^ Te1[(s2>>16)&0xff] ^ Te2[(s3>>8)&0xff] ^ Te3[s0&0xff] ^ rk[off+5]
+        t2 = Te0[(s2>>24)&0xff] ^ Te1[(s3>>16)&0xff] ^ Te2[(s0>>8)&0xff] ^ Te3[s1&0xff] ^ rk[off+6]
+        t3 = Te0[(s3>>24)&0xff] ^ Te1[(s0>>16)&0xff] ^ Te2[(s1>>8)&0xff] ^ Te3[s2&0xff] ^ rk[off+7]
+        s0, s1, s2, s3 = t0, t1, t2, t3
+        off += 4
+
+    off = nr << 2
+    ct = bytearray(16)
+    _st32(ct, (Te4[(s0>>24)&0xff] & 0xff000000)
+             ^ (Te4[(s1>>16)&0xff] & 0x00ff0000)
+             ^ (Te4[(s2>> 8)&0xff] & 0x0000ff00)
+             ^ (Te4[ s3     &0xff] & 0x000000ff)
+             ^ rk[off], 0)
+    _st32(ct, (Te4[(s1>>24)&0xff] & 0xff000000)
+             ^ (Te4[(s2>>16)&0xff] & 0x00ff0000)
+             ^ (Te4[(s3>> 8)&0xff] & 0x0000ff00)
+             ^ (Te4[ s0     &0xff] & 0x000000ff)
+             ^ rk[off+1], 4)
+    _st32(ct, (Te4[(s2>>24)&0xff] & 0xff000000)
+             ^ (Te4[(s3>>16)&0xff] & 0x00ff0000)
+             ^ (Te4[(s0>> 8)&0xff] & 0x0000ff00)
+             ^ (Te4[ s1     &0xff] & 0x000000ff)
+             ^ rk[off+2], 8)
+    _st32(ct, (Te4[(s3>>24)&0xff] & 0xff000000)
+             ^ (Te4[(s0>>16)&0xff] & 0x00ff0000)
+             ^ (Te4[(s1>> 8)&0xff] & 0x0000ff00)
+             ^ (Te4[ s2     &0xff] & 0x000000ff)
+             ^ rk[off+3], 12)
+    return ct
+
+
+class BlockState:
+    """Pure-Python equivalent of the C `block_state` struct."""
+    def __init__(self, key):
+        self.rounds = {16: 10, 24: 12, 32: 14}[len(key)]
+        self.ek, _ = key_setup_enc(key, len(key) * 8)
+
+    def encrypt_block(self, block16):
+        return bytes(rijndael_encrypt(self.ek, self.rounds, block16))
+
+    def encrypt(self, data):
+        out = bytearray()
+        for i in range(0, len(data), 16):
+            out += rijndael_encrypt(self.ek, self.rounds, data[i:i+16])
+        return bytes(out)
 
 class EcbMode:
-    def __init__(self, block_cipher: Any) -> None:
-        self.block_size = block_cipher.block_size
-        self._state = SmartPointer(block_cipher.get())
+    def __init__(self, key: bytes) -> None:
+        self.block_size = 16
+        self._state = BlockState(key)
 
-    def encrypt(
-        self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
-    ) -> Optional[bytes]:
-        ciphertext = create_output_buffer(len(plaintext))
-        with ciphertext as ciphertext_ptr:
-            plaintext_ptr, plaintext_len = plaintext, len(plaintext)
-            raw_ecb_lib.ECB_encrypt(
-                self._state.get(), plaintext_ptr, ciphertext_ptr, plaintext_len
-            )
-        return get_raw_buffer(ciphertext)
+    def encrypt(self, plaintext, output=None):
+        data = bytes(plaintext)
+        if len(data) % 16:
+            raise ValueError("ECB plaintext length must be a multiple of 16")
+
+        result = self._state.encrypt(data)
+
+        if output is not None:
+            output[:] = result           # honour caller's buffer
+            return None
+        return result
 
 from ECC import long_to_bytes
 
@@ -345,19 +512,12 @@ def _create_ctr_cipher(factory, **kwargs):
             counter_len,
             False,  # little_endian
         )
-
-    # Crypto.Util.Counter is used
-
-    # 'counter' used to be a callable object, but now it is
-    # just a dictionary for backward compatibility.
     _counter = dict(counter)
     counter_len = _counter.pop("counter_len")
     prefix = _counter.pop("prefix")
     suffix = _counter.pop("suffix")
     initial_value = _counter.pop("initial_value")
     little_endian = _counter.pop("little_endian")
-
-    # Compute initial counter block
     words = []
     words += [b"\x00"] * max(0, counter_len - len(words))
     if not little_endian:
@@ -365,10 +525,9 @@ def _create_ctr_cipher(factory, **kwargs):
     initial_counter_block = prefix + b"".join(words) + suffix
     return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian, threads)
 
+
 def _create_ecb_cipher(factory, **kwargs):
-    cipher_state = factory._create_base_cipher(kwargs)
-    cipher_state.block_size = factory.block_size
-    return EcbMode(cipher_state)
+    return EcbMode(kwargs["key"])
 
 def _create_cipher(factory, key, mode, **kwargs):
     if mode == 1:
