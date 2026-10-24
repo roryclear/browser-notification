@@ -133,10 +133,8 @@ class GcmMode:
 
         return self._tag
     
-    def encrypt_and_digest(
-        self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
-    ) -> tuple[Optional[bytes], bytes]:
-        return self.encrypt(plaintext, output=output), self.digest()
+def encrypt_and_digest(cipher, plaintext):
+    return cipher.encrypt(plaintext), cipher.digest()
 
 _ghash_api = """
     int ghash_portable(uint8_t y_out[16],

@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import SHA256
 import DSS
 import AES
+from AES import encrypt_and_digest
 import ECC
 
 from KDF import HKDF
@@ -135,14 +136,9 @@ def derive_key(salt, private_key, dh, auth_secret):
 def encrypt(content, private_key=None, dh=None, auth_secret=None):
     rs = 4096
     def encrypt_record(key, nonce, counter, buf):
-        cipher = AES.new(
-            key,
-            AES.MODE_GCM,
-            nonce=iv(nonce, counter),
-            mac_len=16,
-        )
+        cipher = AES.new(key, AES.MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
 
-        ciphertext, tag = cipher.encrypt_and_digest(buf + b"\x02")
+        ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
         return ciphertext + tag
 
     def compose_aes128gcm(salt, content, rs, keyid):
