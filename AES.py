@@ -13,6 +13,16 @@ def create_output_buffer(size: int) -> Any: return create_string_buffer(size)
 
 def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
+from Crypto.Cipher._mode_gcm import _ghash_portable, GcmMode
+
+def _create_gcm_cipher(factory, **kwargs):
+    key = kwargs.pop("key")
+    nonce = kwargs.pop("nonce", None)
+    mac_len = kwargs.pop("mac_len", 16)
+    threads = kwargs.pop("threads", 1)
+    ghash_c = _ghash_portable
+    return GcmMode(factory, key, nonce, mac_len, kwargs, None, threads)
+
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
     def get(self): return self._pp[0]
@@ -203,7 +213,6 @@ def _create_cipher(factory, key, mode, **kwargs):
         res = _create_ctr_cipher(factory, key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
 
     elif mode == 11:
-        from Crypto.Cipher._mode_gcm import _create_gcm_cipher
         res = _create_gcm_cipher(factory, key=key, nonce=kwargs["nonce"])
 
     return res
