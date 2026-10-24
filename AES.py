@@ -66,7 +66,7 @@ def iv(base, counter):
     (mask,) = struct.unpack("!Q", base[4:])
     return base[:4] + struct.pack("!Q", counter ^ mask)
 
-def aes_encrypt(content, dh=None, auth_secret=None):
+def aes_encrypt(content, dh=None, auth_secret=None, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
@@ -104,9 +104,9 @@ def aes_encrypt(content, dh=None, auth_secret=None):
 
     public_key = private_key.public_key().export_key(format="SEC1")
 
-    return compose_aes128gcm(
-        salt, result, rs, keyid=public_key
-    )
+    headers.update({"Content-Encoding": "aes128gcm", "TTL": "60",})
+
+    return compose_aes128gcm(salt, result, rs, keyid=public_key), headers
 
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):

@@ -106,16 +106,12 @@ if __name__ == "__main__":
         subscription_info["keys"]["auth"].encode("ascii")
     )
 
-    encoded_data = aes_encrypt(
+    encoded_data, headers = aes_encrypt(
         data,
         dh=receiver_key,
         auth_secret=auth_key,
+        headers=headers
     )
-
-    headers.update({
-        "Content-Encoding": "aes128gcm",
-        "TTL": "60",
-    })
 
     response = requests.post(
         endpoint,
