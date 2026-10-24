@@ -221,7 +221,6 @@ class _GHASH:
 class GcmMode:
     def __init__(
         self,
-        factory: Any,
         key: Any,
         nonce: Any,
         mac_len: int,
@@ -229,9 +228,8 @@ class GcmMode:
         ghash_c: Any,
         threads: int = 1,
     ) -> None:
-        self.block_size = factory.block_size
+        self.block_size = 16
         self.nonce = bytes(nonce)
-        self._factory = factory
         self._key = bytes(key)
         self._tag: Optional[bytes] = None  # Cache for MAC tag
 
@@ -239,7 +237,7 @@ class GcmMode:
         self._no_more_assoc_data = False
         self._auth_len = 0
         self._msg_len = 0
-        hash_subkey = factory.new_cipher(key, self._factory.MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
+        hash_subkey = new_cipher(key, MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
 
 
         j0 = self.nonce + b"\x00\x00\x00\x01"
@@ -247,16 +245,16 @@ class GcmMode:
         # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = factory.new_cipher(
+        self._cipher = new_cipher(
             key,
-            self._factory.MODE_CTR,
+            MODE_CTR,
             initial_value=iv_ctr,
             nonce=nonce_ctr,
             threads=threads,
             **cipher_params,
         )
         self._signer = _GHASH(hash_subkey, ghash_c)
-        self._tag_cipher = factory.new_cipher(key, self._factory.MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
+        self._tag_cipher = new_cipher(key, MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
         self._cache = b""
 
     def _update(self, data):
@@ -333,7 +331,7 @@ _ghash_api = """
                             const void *exp_key);
 """
 
-def _create_gcm_cipher(factory, **kwargs):
+def _create_gcm_cipher(**kwargs):
     key = kwargs.pop("key")
     nonce = kwargs.pop("nonce", None)
     mac_len = kwargs.pop("mac_len", 16)
@@ -345,7 +343,7 @@ def _create_gcm_cipher(factory, **kwargs):
     imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
     params = dict(zip(funcs, imp_funcs))
     ghash_c = GHASH_Imp(**params)
-    return GcmMode(factory, key, nonce, mac_len, kwargs, ghash_c, threads)
+    return GcmMode(key, nonce, mac_len, kwargs, ghash_c, threads)
 
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
@@ -696,7 +694,7 @@ class CtrMode:
     def check(self, n: int) -> bool:
         return self._bytes_processed + n <= self._max_bytes
 
-def _create_ctr_cipher(factory, **kwargs):
+def _create_ctr_cipher(**kwargs):
     kwargs.pop("threads", None)                     # ignored
     key = kwargs.pop("key")
 
@@ -707,7 +705,8 @@ def _create_ctr_cipher(factory, **kwargs):
     initial_value = kwargs.pop("initial_value", None)
 
     if counter is None:
-        counter_len = factory.block_size - len(nonce)
+        # factory block size 16
+        counter_len = 16 - len(nonce)
         if initial_value is None:
             initial_value = 0
         if isinstance(initial_value, int):
@@ -734,18 +733,18 @@ def _create_ctr_cipher(factory, **kwargs):
     return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian)
 
 
-def _create_ecb_cipher(factory, **kwargs):
+def _create_ecb_cipher(**kwargs):
     return EcbMode(kwargs["key"])
 
-def _create_cipher(factory, key, mode, **kwargs):
+def _create_cipher(key, mode, **kwargs):
     if mode == 1:
-        res = _create_ecb_cipher(factory, key=key)
+        res = _create_ecb_cipher(key=key)
 
     elif mode == 6:
-        res = _create_ctr_cipher(factory, key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
+        res = _create_ctr_cipher(key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
 
     elif mode == 11:
-        res = _create_gcm_cipher(factory, key=key, nonce=kwargs["nonce"])
+        res = _create_gcm_cipher(key=key, nonce=kwargs["nonce"])
 
     return res
 
@@ -762,8 +761,7 @@ MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
 
-def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any:
-    return _create_cipher(sys.modules[__name__], key, mode, *args, **kwargs)
+def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any: return _create_cipher(key, mode, *args, **kwargs)
 
 # Size of a data block (in bytes)
 block_size: int = 16
