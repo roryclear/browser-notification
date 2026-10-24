@@ -447,37 +447,13 @@ class CtrMode:
     def _process(
         self, data, output: Optional[Union[bytearray, memoryview]], what: str
     ) -> Optional[bytes]:
-        """Encrypt or decrypt (which are the same operation in CTR mode)"""
-
-        if output is None:
-            result_buffer = create_output_buffer(len(data))
-        else:
-            result_buffer = output
-
-            if not is_writeable_buffer(output):
-                raise TypeError("output must be a bytearray or a writeable memoryview")
-
-            if len(data) != len(output):
-                raise ValueError("output must have the same length as the input  (%d bytes)" % len(data))
+        result_buffer = create_output_buffer(len(data))
 
         with result_buffer as result_ptr:
             data_ptr, data_len = data, len(data)
-            # Check the lengths of the buffers that C code gets
-            if len(result_ptr) != data_len:
-                raise ValueError("output must have the same length as the input  (%d bytes)" % data_len)
-            result = self._ctr(data_ptr, result_ptr, data_len)
-        self._check(result, what)
+            raw_ctr_lib.CTR_encrypt(self._state.get(), data_ptr, result_ptr, data_len)
 
-        if output is None:
-            return get_raw_buffer(result_buffer)
-        else:
-            return None
-
-    def _ctr(self, in_ptr, out_ptr, data_len: int) -> int:
-        return raw_ctr_lib.CTR_encrypt(self._state.get(), in_ptr, out_ptr, data_len)
-
-    @staticmethod
-    def _check(result: int, what: str) -> None: pass
+        return get_raw_buffer(result_buffer)
 
 def _create_ctr_cipher(factory, **kwargs):
     threads = kwargs.pop("threads", 1)
