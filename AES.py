@@ -7,7 +7,7 @@ from KDF import HKDF
 import SHA256
 import base64, json
 import copy, time
-import DSS
+from DSS import FipsEcDsaSigScheme
 from urllib.parse import urlparse
 
 KEY_LENGTH = 16
@@ -61,7 +61,7 @@ def sign(claims, key):
 
     token = "{}.{}".format(header, claims)
 
-    signer = DSS.new(key, "fips-186-3", encoding="binary")
+    signer = FipsEcDsaSigScheme(key)
 
     # todo patch throw in lib
     import hashlib

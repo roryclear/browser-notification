@@ -1,6 +1,7 @@
-from typing import Callable, Optional, Union, Any
+from typing import Union, Any
 import secrets
 import operator
+
 
 def ceil_div(n: int, d: int) -> int:
     r, q = divmod(n, d)
@@ -30,20 +31,11 @@ class DssSigScheme:
         return output
 
 class FipsEcDsaSigScheme(DssSigScheme):
-    def __init__(
-        self, key: Any, order: Any,
-    ) -> None:
+    def __init__(self, key: Any) -> None:
+        order = key._curve.order
         super().__init__(key, order)
         self._randfunc = None
 
     def _compute_nonce(self):
         n = int(self._key._curve.order)
         return secrets.randbelow(n - 1) + 1
-
-def new(
-    key: Union[Any, Any],
-    mode: str,
-    encoding: str = "binary",
-    randfunc: Optional[Callable[[int], bytes]] = None):
-    order = key._curve.order
-    return FipsEcDsaSigScheme(key, order)
