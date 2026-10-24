@@ -237,7 +237,7 @@ class GcmMode:
         self._no_more_assoc_data = False
         self._auth_len = 0
         self._msg_len = 0
-        hash_subkey = _create_cipher(key, MODE_ECB, **cipher_params).encrypt(b"\x00" * 16)
+        hash_subkey = EcbMode(key).encrypt(b"\x00" * 16)
 
 
         j0 = self.nonce + b"\x00\x00\x00\x01"
@@ -733,10 +733,7 @@ def _create_ctr_cipher(**kwargs):
     return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian)
 
 def _create_cipher(key, mode, initial_value=None, nonce=None,**kwargs):
-    if mode == 1:
-        res = EcbMode(key)
-
-    elif mode == 6:
+    if mode == 6:
         res = _create_ctr_cipher(key=key, initial_value=initial_value, nonce=nonce)
 
     elif mode == 11:
@@ -753,7 +750,6 @@ backend: str = "cffi"
 
 Buffer = Union[bytes, bytearray, memoryview]
 
-MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
 
