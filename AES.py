@@ -530,9 +530,6 @@ class EcbMode:
 
 from ECC import long_to_bytes
 
-class CTRRepeatedKeyStreamError(Exception):
-    """Raised when the CTR keystream would wrap around (NIST SP 800-38A limit)."""
-
 
 class CtrMode:
     def __init__(
