@@ -167,7 +167,7 @@ def aes_encrypt(content, headers=None):
         ghash_c = GHASH_Imp(**params)
         cipher = GcmMode(key, nonce, ghash_c)
 
-        ciphertext, tag = cipher.encrypt(buf + b"\x02"), cipher._compute_mac()
+        ciphertext, tag = encrypt(cipher=cipher, plaintext=buf + b"\x02"), cipher._compute_mac()
         return ciphertext + tag
 
     def compose_aes128gcm(salt, content, rs, keyid):
@@ -275,15 +275,6 @@ class GcmMode:
                 data = memoryview(data)[:update_len]
             self._signer.update(data)
 
-    def encrypt(
-        self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
-    ) -> Optional[bytes]:
-        ciphertext = self._cipher.encrypt(plaintext, output=output)
-        self._update(ciphertext if output is None else output)
-        self._msg_len += len(plaintext)
-
-        return ciphertext
-
     def _compute_mac(self):
         # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
         self._update(b"\x00" * (16 - len(self._cache)))
@@ -295,7 +286,12 @@ class GcmMode:
         self._tag = self._tag_cipher.encrypt(s_tag)[: self._mac_len]
 
         return self._tag
-    
+
+def encrypt(cipher, plaintext) -> Optional[bytes]:
+    ciphertext = cipher._cipher.encrypt(plaintext)
+    cipher._update(ciphertext)
+    cipher._msg_len += len(plaintext)
+    return ciphertext   
 
 _ghash_api = """
     int ghash_portable(uint8_t y_out[16],
@@ -642,40 +638,10 @@ class CtrMode:
 
     # ----------------------------------------------------------------- public
 
-    def encrypt(self, plaintext, output=None):
+    def encrypt(self, plaintext):
         data = bytes(plaintext)
-        self._check(len(data))
         ks = self._consume(len(data))
-        result = bytes(a ^ b for a, b in zip(data, ks))
-        if output is not None:
-            output[:] = result
-            return None
-        return result
-
-    def decrypt(self, ciphertext, output=None):          # CTR is symmetric
-        return self.encrypt(ciphertext, output=output)
-
-    def encrypt_at(self, plaintext, offset, output=None):
-        """Peek at `offset` from current position; state is unchanged."""
-        data = bytes(plaintext)
-        if self._bytes_processed + offset + len(data) > self._max_bytes:
-            raise CTRRepeatedKeyStreamError(
-                "keystream would repeat (limit %d bytes)" % self._max_bytes
-            )
-        ks = self._peek(offset, len(data))
-        result = bytes(a ^ b for a, b in zip(data, ks))
-        if output is not None:
-            output[:] = result
-            return None
-        return result
-
-    def skip(self, n: int) -> None:
-        self._check(n)
-        self._consume(n)                                  # discard keystream
-
-    def check(self, n: int) -> bool:
-        return self._bytes_processed + n <= self._max_bytes
-
+        return bytes(a ^ b for a, b in zip(data, ks))
 
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
