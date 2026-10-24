@@ -10,18 +10,6 @@ import copy, time
 import DSS
 from urllib.parse import urlparse
 
-from typing import Any, Union, Optional
-import os
-import struct
-import ECC
-from KDF import HKDF
-import SHA256
-import base64, json
-import copy, time
-import DSS
-from urllib.parse import urlparse
-
-
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
 
