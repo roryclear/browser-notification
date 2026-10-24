@@ -15,8 +15,14 @@ def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
 from ECC import bytes_to_long
 
-from Crypto.Cipher._mode_gcm import _build_impl
+from collections import namedtuple
 
+def _build_impl(lib, postfix):
+    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
+    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
+    imp_funcs = [getattr(lib, x + "_" + postfix) for x in funcs]
+    params = dict(zip(funcs, imp_funcs))
+    return GHASH_Imp(**params)
 
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):
