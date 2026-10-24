@@ -122,6 +122,10 @@ def derive_key(salt, private_key, dh, auth_secret):
 
     return key, nonce
 
+def iv(base, counter):
+    (mask,) = struct.unpack("!Q", base[4:])
+    return base[:4] + struct.pack("!Q", counter ^ mask)
+
 def b64urldecode(data):
     padded = data.replace(b"+", b"-").replace(b"/", b"_") + b"===="[len(data) % 4 :]
     return base64.urlsafe_b64decode(padded)
@@ -151,6 +155,9 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
+        # todo, use counter
+        nonce=iv(nonce, counter)
+
         lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
         funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
         GHASH_Imp = namedtuple("_GHash_Imp", funcs)
