@@ -1,5 +1,5 @@
 import json
-import requests
+import urllib.request
 
 from AES import aes_encrypt
 
@@ -9,17 +9,18 @@ if __name__ == "__main__":
         "body": "Hello from python!",
     }).encode("utf8")
 
-    with open("notif_keys.json") as f: subscription_info = json.load(f)
-
+    with open("notif_keys.json") as f:
+        subscription_info = json.load(f)
 
     encoded_data, headers, endpoint = aes_encrypt(data)
 
-    response = requests.post(
-        endpoint,
-        timeout=30,
+    req = urllib.request.Request(
+        url=endpoint,
         data=encoded_data,
         headers=headers,
+        method="POST",
     )
 
-    print("HTTP status:", response.status_code)
-    print("Response:", response.text)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        print("HTTP status:", response.status)
+        print("Response:", response.read().decode("utf8"))
