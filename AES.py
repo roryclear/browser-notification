@@ -15,7 +15,30 @@ def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
 from ECC import bytes_to_long
 
-from Crypto.Cipher._mode_gcm import _build_impl, _GHASH
+from Crypto.Cipher._mode_gcm import _build_impl, c_uint8_ptr_len
+
+class _GHASH:
+    def __init__(self, subkey, ghash_c, threads=1):
+        self.ghash_c = ghash_c
+        self._threads = threads
+
+        self._exp_key = VoidPointer()
+        ghash_c.ghash_expand(subkey, self._exp_key.address_of())
+        self._exp_key = SmartPointer(self._exp_key.get())
+        self._last_y = create_string_buffer(16)
+
+    def update(self, block_data):
+        block_data_ptr, block_data_len = c_uint8_ptr_len(block_data)
+        self.ghash_c.ghash(
+            self._last_y,
+            block_data_ptr,
+            block_data_len,
+            self._last_y,
+            self._exp_key.get(),
+        )
+        return self
+
+    def digest(self): return get_raw_buffer(self._last_y)
 
 class GcmMode:
     def __init__(
