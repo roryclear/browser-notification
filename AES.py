@@ -17,13 +17,6 @@ from ECC import bytes_to_long
 
 from collections import namedtuple
 
-def _build_impl(lib, postfix):
-    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
-    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
-    imp_funcs = [getattr(lib, x + "_" + postfix) for x in funcs]
-    params = dict(zip(funcs, imp_funcs))
-    return GHASH_Imp(**params)
-
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):
         self.ghash_c = ghash_c
@@ -182,8 +175,11 @@ _ghash_api_template = """
 def _get_ghash_portable():
     api = _ghash_api_template.replace("%imp%", "portable")
     lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", api)
-    result = _build_impl(lib, "portable")
-    return result
+    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
+    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
+    imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
+    params = dict(zip(funcs, imp_funcs))
+    return GHASH_Imp(**params)
 
 _ghash_portable = _get_ghash_portable()
 
