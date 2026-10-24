@@ -150,22 +150,22 @@ def _create_gcm_cipher(factory, **kwargs):
 
     return GcmMode(factory, key, nonce, mac_len, kwargs, ghash_c, threads)
 
-_ghash_api_template = """
-    int ghash_%imp%(uint8_t y_out[16],
+_ghash_api = """
+    int ghash_portable(uint8_t y_out[16],
                     const uint8_t block_data[],
                     size_t len,
                     const uint8_t y_in[16],
                     const void *exp_key);
-    int ghash_expand_%imp%(const uint8_t h[16],
+    int ghash_expand_portable(const uint8_t h[16],
                            void **ghash_tables);
-    int ghash_destroy_%imp%(void *ghash_tables);
-    int ghash_at_%imp%(uint8_t y_out[16],
+    int ghash_destroy_portable(void *ghash_tables);
+    int ghash_at_portable(uint8_t y_out[16],
                        const uint8_t block_data[],
                        size_t offset,
                        size_t len,
                        const uint8_t y_in[16],
                        const void *exp_key);
-    int ghash_combine_%imp%(uint8_t y_out[16],
+    int ghash_combine_portable(uint8_t y_out[16],
                             const uint8_t y_in[16],
                             size_t n_blocks,
                             const uint8_t g[16],
@@ -173,8 +173,7 @@ _ghash_api_template = """
 """
 
 def _get_ghash_portable():
-    api = _ghash_api_template.replace("%imp%", "portable")
-    lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", api)
+    lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
     funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
     GHASH_Imp = namedtuple("_GHash_Imp", funcs)
     imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
