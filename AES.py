@@ -732,19 +732,15 @@ def _create_ctr_cipher(**kwargs):
     initial_counter_block = prefix + zeros + suffix
     return CtrMode(cipher_state, initial_counter_block, len(prefix), counter_len, little_endian)
 
-
-def _create_ecb_cipher(**kwargs):
-    return EcbMode(kwargs["key"])
-
-def _create_cipher(key, mode, **kwargs):
+def _create_cipher(key, mode, initial_value=None, nonce=None,**kwargs):
     if mode == 1:
-        res = _create_ecb_cipher(key=key)
+        res = EcbMode(key)
 
     elif mode == 6:
-        res = _create_ctr_cipher(key=key, initial_value=kwargs["initial_value"], nonce=kwargs["nonce"])
+        res = _create_ctr_cipher(key=key, initial_value=initial_value, nonce=nonce)
 
     elif mode == 11:
-        res = _create_gcm_cipher(key=key, nonce=kwargs["nonce"])
+        res = _create_gcm_cipher(key=key, nonce=nonce)
 
     return res
 
@@ -761,7 +757,7 @@ MODE_ECB: Literal[1] = 1  #: Electronic Code Book (:ref:`ecb_mode`)
 MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
 MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
 
-def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any: return _create_cipher(key, mode, *args, **kwargs)
+def new_cipher(key: Any, mode: int, *args: Any, **kwargs: Any) -> Any: return _create_cipher(key, mode, **kwargs)
 
 # Size of a data block (in bytes)
 block_size: int = 16
