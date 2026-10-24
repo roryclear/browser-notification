@@ -156,7 +156,17 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        cipher = _create_gcm_cipher(key, nonce=iv(nonce, counter))
+        # todo, use counter
+        nonce=iv(nonce, counter)
+
+        lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
+        funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
+        GHASH_Imp = namedtuple("_GHash_Imp", funcs)
+        imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
+        params = dict(zip(funcs, imp_funcs))
+        ghash_c = GHASH_Imp(**params)
+        cipher = GcmMode(key, nonce, ghash_c)
+
         ciphertext, tag = cipher.encrypt(buf + b"\x02"), cipher._compute_mac()
         return ciphertext + tag
 
@@ -308,15 +318,6 @@ _ghash_api = """
                             const uint8_t g[16],
                             const void *exp_key);
 """
-
-def _create_gcm_cipher(key=None, nonce=None):
-    lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
-    funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
-    GHASH_Imp = namedtuple("_GHash_Imp", funcs)
-    imp_funcs = [getattr(lib, x + "_" + "portable") for x in funcs]
-    params = dict(zip(funcs, imp_funcs))
-    ghash_c = GHASH_Imp(**params)
-    return GcmMode(key, nonce, ghash_c)
 
 def _create_ctr_cipher(key, initial_value, nonce):
     cipher_state = BlockState(key)
