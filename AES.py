@@ -79,7 +79,7 @@ class GcmMode:
             threads=threads,
             **cipher_params,
         )
-        self._signer = _GHASH(hash_subkey, ghash_c, self._cipher._threads)
+        self._signer = _GHASH(hash_subkey, ghash_c)
         self._tag_cipher = factory.new(key, self._factory.MODE_CTR, initial_value=j0, nonce=b"", **cipher_params)
         self._cache = b""
 
@@ -233,7 +233,7 @@ class EcbMode:
         return get_raw_buffer(ciphertext)
 
 from ECC import long_to_bytes
-from Crypto.Cipher._mode_ctr import threads_param, raw_ctr_lib
+from Crypto.Cipher._mode_ctr import raw_ctr_lib
 
 class CtrMode:
     def __init__(
@@ -243,10 +243,7 @@ class CtrMode:
         prefix_len: int,
         counter_len: int,
         little_endian: bool,
-        threads: int = 1,
     ) -> None:
-        self._threads = threads_param(threads)
-
         if len(initial_counter_block) == prefix_len + counter_len:
             self.nonce = bytes(initial_counter_block[:prefix_len])
 
@@ -301,16 +298,10 @@ class CtrMode:
             return None
 
     def _ctr(self, in_ptr, out_ptr, data_len: int) -> int:
-        if self._threads > 1:
-            return _ctr_threaded(self._state.get(), in_ptr, out_ptr, data_len, self._threads)
         return raw_ctr_lib.CTR_encrypt(self._state.get(), in_ptr, out_ptr, data_len)
 
     @staticmethod
-    def _check(result: int, what: str) -> None:
-        if result:
-            if result == 0x60002:
-                raise MessageTooLongError("The counter has wrapped around in CTR mode")
-            raise ValueError("Error %X while %s in CTR mode" % (result, what))
+    def _check(result: int, what: str) -> None: pass
 
 def _create_ctr_cipher(factory, **kwargs):
     threads = kwargs.pop("threads", 1)
@@ -344,7 +335,6 @@ def _create_ctr_cipher(factory, **kwargs):
             len(nonce),  # prefix
             counter_len,
             False,  # little_endian
-            threads,
         )
 
     # Crypto.Util.Counter is used
