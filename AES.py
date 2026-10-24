@@ -9,6 +9,7 @@ import struct
 import ECC
 from KDF import HKDF
 import SHA256
+import base64, json
 
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
@@ -66,7 +67,21 @@ def iv(base, counter):
     (mask,) = struct.unpack("!Q", base[4:])
     return base[:4] + struct.pack("!Q", counter ^ mask)
 
-def aes_encrypt(content, dh=None, auth_secret=None, headers=None):
+def b64urldecode(data):
+    padded = data.replace(b"+", b"-").replace(b"/", b"_") + b"===="[len(data) % 4 :]
+    return base64.urlsafe_b64decode(padded)
+
+def aes_encrypt(content, headers=None):
+
+    with open("notif_keys.json") as f: subscription_info = json.load(f)
+
+    receiver_key = b64urldecode(
+        subscription_info["keys"]["p256dh"].encode("ascii")
+    )
+    auth_key = b64urldecode(
+        subscription_info["keys"]["auth"].encode("ascii")
+    )
+
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
@@ -86,8 +101,8 @@ def aes_encrypt(content, dh=None, auth_secret=None, headers=None):
     key, nonce = derive_key(
         salt=salt,
         private_key=private_key,
-        dh=dh,
-        auth_secret=auth_secret,
+        dh=receiver_key,
+        auth_secret=auth_key,
     )
 
     overhead = 1 + 16

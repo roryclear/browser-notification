@@ -80,13 +80,12 @@ class Vapid:
 
 
 if __name__ == "__main__":
-    with open("notif_keys.json") as f:
-        subscription_info = json.load(f)
-
     data = json.dumps({
         "title": "Notification",
         "body": "Hello from python!",
     }).encode("utf8")
+
+    with open("notif_keys.json") as f: subscription_info = json.load(f)
 
     endpoint = subscription_info["endpoint"]
     url = urlparse(endpoint)
@@ -99,17 +98,8 @@ if __name__ == "__main__":
     vv = Vapid.from_file("vapid_private.pem")
     headers = vv.sign(vapid_claims)
 
-    receiver_key = b64urldecode(
-        subscription_info["keys"]["p256dh"].encode("ascii")
-    )
-    auth_key = b64urldecode(
-        subscription_info["keys"]["auth"].encode("ascii")
-    )
-
     encoded_data, headers = aes_encrypt(
         data,
-        dh=receiver_key,
-        auth_secret=auth_key,
         headers=headers
     )
 
