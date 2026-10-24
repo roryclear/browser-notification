@@ -157,7 +157,7 @@ def aes_encrypt(content, headers=None):
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
         cipher = _create_gcm_cipher(key, nonce=iv(nonce, counter))
-        ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
+        ciphertext, tag = cipher.encrypt(buf + b"\x02"), cipher._compute_mac()
         return ciphertext + tag
 
     def compose_aes128gcm(salt, content, rs, keyid):
@@ -215,8 +215,6 @@ class _GHASH:
             self._exp_key.get(),
         )
         return self
-
-    def digest(self): return get_raw_buffer(self._last_y)
 
 class GcmMode:
     def __init__(
@@ -276,23 +274,18 @@ class GcmMode:
 
         return ciphertext
 
-    def digest(self) -> bytes:
-        return self._compute_mac()
-
     def _compute_mac(self):
         # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
         self._update(b"\x00" * (16 - len(self._cache)))
         self._update(long_to_bytes(8 * self._auth_len, 8))
         self._update(long_to_bytes(8 * self._msg_len, 8))
-        s_tag = self._signer.digest()
+        s_tag = get_raw_buffer(self._signer._last_y)
 
         # Step 6 - Compute T
         self._tag = self._tag_cipher.encrypt(s_tag)[: self._mac_len]
 
         return self._tag
     
-def encrypt_and_digest(cipher, plaintext):
-    return cipher.encrypt(plaintext), cipher.digest()
 
 _ghash_api = """
     int ghash_portable(uint8_t y_out[16],
