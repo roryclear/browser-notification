@@ -15,7 +15,8 @@ def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
 from ECC import bytes_to_long
 
-from Crypto.Cipher._mode_gcm import _build_impl, c_uint8_ptr_len
+from Crypto.Cipher._mode_gcm import _build_impl
+
 
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):
@@ -28,7 +29,8 @@ class _GHASH:
         self._last_y = create_string_buffer(16)
 
     def update(self, block_data):
-        block_data_ptr, block_data_len = c_uint8_ptr_len(block_data)
+        block_data = cffi.FFI().from_buffer("uint8_t[]", block_data)
+        block_data_ptr, block_data_len = block_data, len(block_data)
         self.ghash_c.ghash(
             self._last_y,
             block_data_ptr,
