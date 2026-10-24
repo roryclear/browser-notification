@@ -167,7 +167,8 @@ def aes_encrypt(content, headers=None):
         ghash_c = GHASH_Imp(**params)
         cipher = GcmMode(key, nonce, ghash_c)
 
-        ciphertext, tag = encrypt(cipher=cipher, plaintext=buf + b"\x02"), cipher._compute_mac()
+        ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
+        tag = _compute_mac(cipher)
         return ciphertext + tag
 
     def compose_aes128gcm(salt, content, rs, keyid):
@@ -275,19 +276,16 @@ class GcmMode:
                 data = memoryview(data)[:update_len]
             self._signer.update(data)
 
-    def _compute_mac(self):
-        # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
-        self._update(b"\x00" * (16 - len(self._cache)))
-        self._update(long_to_bytes(8 * self._auth_len, 8))
-        self._update(long_to_bytes(8 * self._msg_len, 8))
-        s_tag = get_raw_buffer(self._signer._last_y)
+def _compute_mac(cipher):
+    # Step 5 in NIST SP 800-38D, Algorithm 4 - Compute S
+    cipher._update(b"\x00" * (16 - len(cipher._cache)))
+    cipher._update(long_to_bytes(8 * cipher._auth_len, 8))
+    cipher._update(long_to_bytes(8 * cipher._msg_len, 8))
+    s_tag = get_raw_buffer(cipher._signer._last_y)
+    cipher._tag = cipher._tag_cipher.encrypt(s_tag)[: cipher._mac_len]
+    return cipher._tag
 
-        # Step 6 - Compute T
-        self._tag = self._tag_cipher.encrypt(s_tag)[: self._mac_len]
-
-        return self._tag
-
-def encrypt(cipher, plaintext) -> Optional[bytes]:
+def encrypt(cipher, plaintext):
     ciphertext = cipher._cipher.encrypt(plaintext)
     cipher._update(ciphertext)
     cipher._msg_len += len(plaintext)
