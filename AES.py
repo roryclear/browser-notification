@@ -216,7 +216,36 @@ class EcbMode:
         return get_raw_buffer(ciphertext)
 
 from ECC import long_to_bytes
-from Crypto.Cipher._mode_ctr import raw_ctr_lib
+
+raw_ctr_lib = load_pycryptodome_raw_lib(
+    "Crypto.Cipher._raw_ctr",
+    """
+                    int CTR_start_operation(void *cipher,
+                                            uint8_t   initialCounterBlock[],
+                                            size_t    initialCounterBlock_len,
+                                            size_t    prefix_len,
+                                            unsigned  counter_len,
+                                            unsigned  littleEndian,
+                                            void **pResult);
+                    int CTR_encrypt(void *ctrState,
+                                    const uint8_t *in,
+                                    uint8_t *out,
+                                    size_t data_len);
+                    int CTR_decrypt(void *ctrState,
+                                    const uint8_t *in,
+                                    uint8_t *out,
+                                    size_t data_len);
+                    int CTR_encrypt_at(const void *ctrState,
+                                       const uint8_t *in,
+                                       uint8_t *out,
+                                       size_t offset,
+                                       size_t data_len);
+                    int CTR_skip(void *ctrState,
+                                 size_t data_len);
+                    int CTR_check(const void *ctrState,
+                                  size_t data_len);
+                    int CTR_stop_operation(void *ctrState);""",
+)
 
 class CtrMode:
     def __init__(
@@ -227,9 +256,6 @@ class CtrMode:
         counter_len: int,
         little_endian: bool,
     ) -> None:
-        if len(initial_counter_block) == prefix_len + counter_len:
-            self.nonce = bytes(initial_counter_block[:prefix_len])
-
         state = VoidPointer()
         initial_counter_block_ptr, initial_counter_block_len = initial_counter_block, len(initial_counter_block)
         raw_ctr_lib.CTR_start_operation(
