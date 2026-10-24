@@ -219,9 +219,7 @@ raw_ecb_lib = load_pycryptodome_raw_lib(
 class EcbMode:
     def __init__(self, block_cipher: Any) -> None:
         self.block_size = block_cipher.block_size
-        state = VoidPointer()
-        raw_ecb_lib.ECB_start_operation(block_cipher.get(), state.address_of())
-        self._state = SmartPointer(state.get())
+        self._state = SmartPointer(block_cipher.get())
 
     def encrypt(
         self, plaintext, output: Optional[Union[bytearray, memoryview]] = None
@@ -413,13 +411,11 @@ _cproto = """
         int AES_stop_operation(void *state);
         """
 
-# Load portable AES
 _raw_aes_lib = load_pycryptodome_raw_lib("Crypto.Cipher._raw_aes", _cproto)
 
 def _create_base_cipher(dict_parameters):
     key = dict_parameters.pop("key")
     start_operation = _raw_aes_lib.AES_start_operation
-    stop_operation = _raw_aes_lib.AES_stop_operation
 
     cipher = VoidPointer()
     key_ptr, key_len = key, len(key)
