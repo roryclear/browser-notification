@@ -156,7 +156,7 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = ECC.generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        cipher = _create_cipher(key, MODE_GCM, nonce=iv(nonce, counter))
+        cipher = _create_gcm_cipher(key, nonce=iv(nonce, counter))
         ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
         return ciphertext + tag
 
@@ -242,14 +242,9 @@ class GcmMode:
         # Step 3 - Prepare GCTR cipher for encryption/decryption
         nonce_ctr = j0[:12]
         iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = _create_cipher(
-            key,
-            MODE_CTR,
-            initial_value=iv_ctr,
-            nonce=nonce_ctr,
-        )
+        self._cipher = _create_ctr_cipher(key, initial_value=iv_ctr, nonce=nonce_ctr)
         self._signer = _GHASH(hash_subkey, ghash_c)
-        self._tag_cipher = _create_cipher(key, MODE_CTR, initial_value=j0, nonce=b"")
+        self._tag_cipher = _create_ctr_cipher(key, initial_value=j0, nonce=b"")
         self._cache = b""
 
     def _update(self, data):
@@ -326,10 +321,7 @@ _ghash_api = """
                             const void *exp_key);
 """
 
-def _create_gcm_cipher(**kwargs):
-    key = kwargs.pop("key")
-    nonce = kwargs.pop("nonce", None)
-
+def _create_gcm_cipher(key=None, nonce=None):
     lib = load_pycryptodome_raw_lib("Crypto.Hash._ghash_portable", _ghash_api)
     funcs = ("ghash", "ghash_expand", "ghash_destroy", "ghash_at", "ghash_combine")
     GHASH_Imp = namedtuple("_GHash_Imp", funcs)
@@ -338,12 +330,8 @@ def _create_gcm_cipher(**kwargs):
     ghash_c = GHASH_Imp(**params)
     return GcmMode(key, nonce, ghash_c)
 
-def _create_ctr_cipher(**kwargs):
-    key = kwargs.pop("key")
-
+def _create_ctr_cipher(key, initial_value, nonce):
     cipher_state = BlockState(key)
-    nonce         = kwargs.pop("nonce", None)
-    initial_value = kwargs.pop("initial_value", None)
 
     # factory block size 16
     counter_len = 16 - len(nonce)
@@ -705,14 +693,6 @@ class CtrMode:
     def check(self, n: int) -> bool:
         return self._bytes_processed + n <= self._max_bytes
 
-def _create_cipher(key, mode, initial_value=None, nonce=None):
-    if mode == 6:
-        res = _create_ctr_cipher(key=key, initial_value=initial_value, nonce=nonce)
-
-    elif mode == 11:
-        res = _create_gcm_cipher(key=key, nonce=nonce)
-
-    return res
 
 class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
