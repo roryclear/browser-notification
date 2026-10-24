@@ -1,5 +1,4 @@
-import sys
-from typing import Any, Literal, Union, Optional
+from typing import Any, Union, Optional
 from ECC import SmartPointer
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
@@ -645,15 +644,3 @@ class VoidPointer:
     def __init__(self): self._pp = cffi.FFI().new("void *[1]")
     def get(self): return self._pp[0]
     def address_of(self): return self._pp
-
-backend: str = "cffi"
-
-Buffer = Union[bytes, bytearray, memoryview]
-
-MODE_CTR: Literal[6] = 6  #: Counter mode (:ref:`ctr_mode`)
-MODE_GCM: Literal[11] = 11  #: Galois Counter Mode (:ref:`gcm_mode`)
-
-# Size of a data block (in bytes)
-block_size: int = 16
-# Size of a key (in bytes)
-key_size: tuple[int, int, int] = (16, 24, 32)
