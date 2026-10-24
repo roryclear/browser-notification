@@ -10,10 +10,8 @@ import requests
 from typing import cast
 from urllib.parse import urlparse
 
-import SHA256
 import DSS
-import AES
-from AES import encrypt_and_digest
+from AES import aes_encrypt
 import ECC
 
 from KDF import HKDF
@@ -84,146 +82,54 @@ class Vapid:
             )
         }
 
-MAX_RECORD_SIZE = pow(2, 31) - 1
-MIN_RECORD_SIZE = 3
-KEY_LENGTH = 16
-NONCE_LENGTH = 12
 
+if __name__ == "__main__":
+    with open("notif_keys.json") as f:
+        subscription_info = json.load(f)
 
-def iv(base, counter):
-    (mask,) = struct.unpack("!Q", base[4:])
-    return base[:4] + struct.pack("!Q", counter ^ mask)
+    data = json.dumps({
+        "title": "Notification",
+        "body": "Hello from python!",
+    }).encode("utf8")
 
+    endpoint = subscription_info["endpoint"]
+    url = urlparse(endpoint)
 
-def derive_key(salt, private_key, dh, auth_secret):
-    receiver_pub = ECC.import_key(dh, curve_name="P-256")
+    vapid_claims = {
+        "sub": "mailto:fake@fake.invalid",
+        "aud": f"{url.scheme}://{url.netloc}",
+    }
 
-    # ECDH: X coordinate of the shared point, encoded to 32 bytes.
-    shared_point = receiver_pub.pointQ * private_key._d
-    secret = int(shared_point.x).to_bytes(32, "big")
+    vv = Vapid.from_file("vapid_private.pem")
+    headers = vv.sign(vapid_claims)
 
-    sender_pub = private_key.public_key().export_key(format="SEC1")
-
-    context = b"WebPush: info\x00" + dh + sender_pub
-
-    secret = HKDF(
-        secret,
-        32,
-        auth_secret,
-        SHA256,
-        context=context,
+    receiver_key = b64urldecode(
+        subscription_info["keys"]["p256dh"].encode("ascii")
+    )
+    auth_key = b64urldecode(
+        subscription_info["keys"]["auth"].encode("ascii")
     )
 
-    key = HKDF(
-        secret,
-        KEY_LENGTH,
-        salt,
-        SHA256,
-        context=b"Content-Encoding: aes128gcm\x00",
+    server_key = ECC.generate(curve="P-256")
+
+    encoded_data = aes_encrypt(
+        data,
+        private_key=server_key,
+        dh=receiver_key,
+        auth_secret=auth_key,
     )
 
-    nonce = HKDF(
-        secret,
-        NONCE_LENGTH,
-        salt,
-        SHA256,
-        context=b"Content-Encoding: nonce\x00",
+    headers.update({
+        "Content-Encoding": "aes128gcm",
+        "TTL": "60",
+    })
+
+    response = requests.post(
+        endpoint,
+        timeout=30,
+        data=encoded_data,
+        headers=headers,
     )
 
-    return key, nonce
-
-
-def encrypt(content, private_key=None, dh=None, auth_secret=None):
-    rs = 4096
-    def encrypt_record(key, nonce, counter, buf):
-        cipher = AES.new(key, AES.MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
-
-        ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
-        return ciphertext + tag
-
-    def compose_aes128gcm(salt, content, rs, keyid):
-        header = salt
-        header += struct.pack("!L", rs)
-        header += struct.pack("!B", len(keyid))
-        header += keyid
-        return header + content
-
-    salt = os.urandom(16)
-
-    key, nonce = derive_key(
-        salt=salt,
-        private_key=private_key,
-        dh=dh,
-        auth_secret=auth_secret,
-    )
-
-    overhead = 1 + 16
-    chunk_size = rs - overhead
-
-    result = b""
-    counter = 0
-
-    for i in range(0, len(content), chunk_size):
-        result += encrypt_record(
-            key, nonce, counter, content[i:i + chunk_size]
-        )
-        counter += 1
-
-    public_key = private_key.public_key().export_key(format="SEC1")
-
-    return compose_aes128gcm(
-        salt, result, rs, keyid=public_key
-    )
-
-
-def _repad(data: bytes) -> bytes: return data + b"===="[: len(data) % 4]
-
-with open("notif_keys.json") as f:
-    subscription_info = json.load(f)
-
-data = json.dumps({
-    "title": "Notification",
-    "body": "Hello from python!",
-}).encode("utf8")
-
-endpoint = subscription_info["endpoint"]
-url = urlparse(endpoint)
-
-vapid_claims = {
-    "sub": "mailto:fake@fake.invalid",
-    "aud": f"{url.scheme}://{url.netloc}",
-}
-
-vv = Vapid.from_file("vapid_private.pem")
-headers = vv.sign(vapid_claims)
-
-receiver_key = b64urldecode(
-    subscription_info["keys"]["p256dh"].encode("ascii")
-)
-auth_key = b64urldecode(
-    subscription_info["keys"]["auth"].encode("ascii")
-)
-
-server_key = ECC.generate(curve="P-256")
-
-encoded_data = encrypt(
-    data,
-    private_key=server_key,
-    dh=receiver_key,
-    auth_secret=auth_key,
-)
-
-headers.update({
-    "Content-Encoding": "aes128gcm",
-    "TTL": "60",
-})
-
-response = requests.post(
-    endpoint,
-    timeout=30,
-    data=encoded_data,
-    headers=headers,
-)
-
-print("HTTP status:", response.status_code)
-print("Response:", response.text)
+    print("HTTP status:", response.status_code)
+    print("Response:", response.text)

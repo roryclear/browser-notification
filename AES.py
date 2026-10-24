@@ -4,6 +4,14 @@ from ECC import SmartPointer
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 import cffi
+import os
+import struct
+import ECC
+from KDF import HKDF
+import SHA256
+
+KEY_LENGTH = 16
+NONCE_LENGTH = 12
 
 def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
     result = cffi.FFI().new("uint8_t[]", init_or_size)
@@ -16,6 +24,88 @@ def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 from ECC import bytes_to_long
 
 from collections import namedtuple
+
+def derive_key(salt, private_key, dh, auth_secret):
+    receiver_pub = ECC.import_key(dh, curve_name="P-256")
+
+    # ECDH: X coordinate of the shared point, encoded to 32 bytes.
+    shared_point = receiver_pub.pointQ * private_key._d
+    secret = int(shared_point.x).to_bytes(32, "big")
+
+    sender_pub = private_key.public_key().export_key(format="SEC1")
+
+    context = b"WebPush: info\x00" + dh + sender_pub
+
+    secret = HKDF(
+        secret,
+        32,
+        auth_secret,
+        SHA256,
+        context=context,
+    )
+
+    key = HKDF(
+        secret,
+        KEY_LENGTH,
+        salt,
+        SHA256,
+        context=b"Content-Encoding: aes128gcm\x00",
+    )
+
+    nonce = HKDF(
+        secret,
+        NONCE_LENGTH,
+        salt,
+        SHA256,
+        context=b"Content-Encoding: nonce\x00",
+    )
+
+    return key, nonce
+
+def iv(base, counter):
+    (mask,) = struct.unpack("!Q", base[4:])
+    return base[:4] + struct.pack("!Q", counter ^ mask)
+
+def aes_encrypt(content, private_key=None, dh=None, auth_secret=None):
+    rs = 4096
+    def encrypt_record(key, nonce, counter, buf):
+        cipher = new(key, MODE_GCM, nonce=iv(nonce, counter),mac_len=16)
+        ciphertext, tag = encrypt_and_digest(cipher, buf + b"\x02")
+        return ciphertext + tag
+
+    def compose_aes128gcm(salt, content, rs, keyid):
+        header = salt
+        header += struct.pack("!L", rs)
+        header += struct.pack("!B", len(keyid))
+        header += keyid
+        return header + content
+
+    salt = os.urandom(16)
+
+    key, nonce = derive_key(
+        salt=salt,
+        private_key=private_key,
+        dh=dh,
+        auth_secret=auth_secret,
+    )
+
+    overhead = 1 + 16
+    chunk_size = rs - overhead
+
+    result = b""
+    counter = 0
+
+    for i in range(0, len(content), chunk_size):
+        result += encrypt_record(
+            key, nonce, counter, content[i:i + chunk_size]
+        )
+        counter += 1
+
+    public_key = private_key.public_key().export_key(format="SEC1")
+
+    return compose_aes128gcm(
+        salt, result, rs, keyid=public_key
+    )
 
 class _GHASH:
     def __init__(self, subkey, ghash_c, threads=1):
