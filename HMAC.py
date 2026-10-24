@@ -7,14 +7,6 @@ def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = 
 
 def create_output_buffer(size: int) -> Any: return create_string_buffer(size)
 
-class c_uint8_ptr_out:
-    def __init__(self, data) -> None:
-        self._data = data
-        self._copy =None
-
-    def __enter__(self): return self._data
-    def __exit__(self, exc_type, exc_value, traceback) -> None: pass
-
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 from hmac import compare_digest
