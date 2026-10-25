@@ -5,7 +5,6 @@ from Crypto.Math.Numbers import Integer
 from Crypto.Util._raw_api import SmartPointer, VoidPointer, load_pycryptodome_raw_lib
 
 from _curve import _Curve
-from _ec_lib import load_ec_lib
 
 
 def curve25519_curve():
@@ -76,8 +75,7 @@ def curve448_curve():
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
     order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
 
-    _curve448_lib, _ = load_ec_lib(
-        """
+    lib = """
 typedef void Curve448Context;
 typedef void Curve448Point;
 
@@ -92,8 +90,9 @@ int curve448_clone(Curve448Point **P, const Curve448Point *Q);
 int curve448_get_x(uint8_t *xb, size_t modsize, const Curve448Point *p);
 int curve448_scalar(Curve448Point *P, const uint8_t *scalar, size_t scalar_len, uint64_t seed);
 int curve448_cmp(const Curve448Point *ecp1, const Curve448Point *ecp2);
-""",
-    )
+"""
+
+    _curve448_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", lib)
 
     class EcLib:
         new_context = _curve448_lib.curve448_new_context

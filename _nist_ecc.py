@@ -1,6 +1,3 @@
-# This file is licensed under the BSD 2-Clause License.
-# See https://opensource.org/licenses/BSD-2-Clause for details.
-
 from Crypto.Math.Numbers import Integer
 from Crypto.Util._raw_api import (
     SmartPointer,
@@ -10,8 +7,9 @@ from Crypto.Util._raw_api import (
 )
 from Crypto.Util.number import long_to_bytes
 
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
+
 from _curve import _Curve
-from _ec_lib import load_ec_lib
 
 _ec_cdecl = """
 typedef void EcCurve;
@@ -48,10 +46,7 @@ int ec_nat_cmp(const EcPoint *a, const EcPoint *b);
 int ec_nat_neg(EcPoint *p);
 """
 
-
-# _bmi2_adx is only read by CI (.github/workflows/integration.yml)
-_ec_lib, _bmi2_adx = load_ec_lib(_ec_cdecl)
-
+_ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
 
 class EcLib:
     new_point = _ec_lib.ec_nat_new_point
