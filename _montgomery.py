@@ -1,11 +1,6 @@
-# This file is licensed under the BSD 2-Clause License.
-# See https://opensource.org/licenses/BSD-2-Clause for details.
-
 from Crypto.Math.Numbers import Integer
 from Crypto.Util._raw_api import SmartPointer, VoidPointer, load_pycryptodome_raw_lib
-
 from _curve import _Curve
-
 
 def curve25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
@@ -30,27 +25,7 @@ int curve25519_cmp(const Point *ecp1, const Point *ecp2);
 
     class EcLib:
         new_point = _curve25519_lib.curve25519_new_point
-        clone = _curve25519_lib.curve25519_clone
         free_point = _curve25519_lib.curve25519_free_point
-        get_x = _curve25519_lib.curve25519_get_x
-        scalar = _curve25519_lib.curve25519_scalar
-        cmp = _curve25519_lib.curve25519_cmp
-
-    def _validate_x25519_point(point):
-        x1 = 325606250916557431795983626356110631294008115727848805560023387167927233504
-        x2 = 39382357235489614581723060781553021112529911719440698176882885853963445705823
-
-        # http://cr.yp.to/ecdh.html#validate
-        # point.x is reduced modulo p, so it also covers p, p + 1, p + x1, etc.
-        deny_list = (0, 1, x1, x2, p - 1)
-
-        try:
-            valid = point.x not in deny_list
-        except ValueError:
-            valid = False
-
-        if not valid:
-            raise ValueError("Invalid Curve25519 public key")
 
     curve25519 = _Curve(
         Integer(p),
@@ -65,9 +40,8 @@ int curve25519_cmp(const Point *ecp1, const Point *ecp2);
         "Curve25519",
         None,
         EcLib,
-        _validate_x25519_point,
+        None,
     )
-
     return curve25519
 
 
@@ -98,28 +72,10 @@ int curve448_cmp(const Curve448Point *ecp1, const Curve448Point *ecp2);
         new_context = _curve448_lib.curve448_new_context
         free_context = _curve448_lib.curve448_free_context
         new_point = _curve448_lib.curve448_new_point
-        clone = _curve448_lib.curve448_clone
         free_point = _curve448_lib.curve448_free_point
-        get_x = _curve448_lib.curve448_get_x
-        scalar = _curve448_lib.curve448_scalar
-        cmp = _curve448_lib.curve448_cmp
 
     curve448_context = VoidPointer()
-    result = EcLib.new_context(curve448_context.address_of())
-    if result:
-        raise ImportError("Error %d initializing Curve448 context" % result)
-
-    def _validate_x448_point(point):
-        # point.x is reduced modulo p, so it also covers p and p + 1
-        deny_list = (0, 1, p - 1)
-
-        try:
-            valid = point.x not in deny_list
-        except ValueError:
-            valid = False
-
-        if not valid:
-            raise ValueError("Invalid Curve448 public key")
+    EcLib.new_context(curve448_context.address_of())
 
     curve448 = _Curve(
         Integer(p),
@@ -134,7 +90,7 @@ int curve448_cmp(const Curve448Point *ecp1, const Curve448Point *ecp2);
         "Curve448",
         None,
         EcLib,
-        _validate_x448_point,
+        None,
     )
 
     return curve448
