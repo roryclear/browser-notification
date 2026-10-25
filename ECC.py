@@ -14,9 +14,25 @@ import operator
 from abc import ABC
 null_pointer = cffi.FFI().NULL
 
-import importlib
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
-from _curve import _Curve
+
+class _Curve:
+    def __init__(
+        self, p, b, order, Gx, Gy, G, modulus_bits, oid, context, canonical, openssh, rawlib, validate=None
+    ):
+        self.p = p
+        self.b = b
+        self.order = order
+        self.Gx = Gx
+        self.Gy = Gy
+        self.G = G
+        self.modulus_bits = modulus_bits
+        self.oid = oid
+        self.context = context
+        self.canonical = canonical
+        self.openssh = openssh
+        self.rawlib = rawlib
+        self.validate = validate
 
 def curve25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
@@ -444,14 +460,8 @@ class _Curves:
 
     def load(self, name):
         definition = next((d for d in self.definitions if name in d[0]), None)
-        names, curve_id, module_name, function = definition
+        names, curve_id, _, function = definition
         curve_func = globals().get(function)
-
-        # 2. Fall back to the module named in the definition
-        if curve_func is None:
-            module = importlib.import_module(module_name)
-            print(module_name, function)
-            curve_func = getattr(module, function)
 
         curve = curve_func()
         curve.id = curve_id
