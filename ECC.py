@@ -778,13 +778,6 @@ class EccKey:
             return self._export_subjectPublicKeyInfo(compress)
         elif ext_format == "SEC1":
             return self._export_SEC1(compress)
-        elif ext_format == "raw":
-            if self._curve.is_edwards:
-                return self._export_eddsa_public()
-            elif self._curve.is_montgomery:
-                return self._export_montgomery_public()
-            else:
-                return self._export_SEC1(compress)
         else:
             return self._export_openssh(compress)
 

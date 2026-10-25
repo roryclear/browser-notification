@@ -138,8 +138,6 @@ class _Curves:
 
     def load(self, name):
         definition = next((d for d in self.definitions if name in d[0]), None)
-        if definition is None:
-            raise ValueError("Unsupported curve '%s'" % name)
         names, curve_id, module_name, function = definition
         module = importlib.import_module(module_name)
         curve = getattr(module, function)()
@@ -156,13 +154,9 @@ class _Curves:
                     curve.G = EccXPoint(curve.Gx, name)
                 else:
                     curve.G = EccPoint(curve.Gx, curve.Gy, name)
-                curve.is_edwards = curve.id in (CurveID.ED25519, CurveID.ED448)
-                curve.is_montgomery = curve.id in (CurveID.CURVE25519, CurveID.CURVE448)
-                curve.is_weierstrass = not (curve.is_edwards or curve.is_montgomery)
         return curve
 
     def items(self):
-        # Load all curves
         for name in self.all_names:
             _ = self[name]
         return self.curves.items()
@@ -288,13 +282,7 @@ class EccPoint:
         # Compared in C, as the point may be secret (ECDH): only the result leaks
         return self == self.point_at_infinity()
 
-    def point_at_infinity(self) -> EccPoint:
-        """Return the *point-at-infinity* for the curve."""
-
-        if self._curve.is_edwards:
-            return EccPoint(0, 1, self.curve)
-        else:
-            return EccPoint(0, 0, self.curve)
+    def point_at_infinity(self) -> EccPoint: return EccPoint(0, 0, self.curve)
 
     @property
     def x(self) -> int:
