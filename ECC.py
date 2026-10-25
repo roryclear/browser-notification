@@ -149,46 +149,19 @@ def ed448_curve():
 typedef void EcContext;
 typedef void PointEd448;
 int ed448_new_context(EcContext **pec_ctx);
-void ed448_free_context(EcContext *ec_ctx);
 int ed448_new_point(PointEd448 **out,
                     const uint8_t x[56],
                     const uint8_t y[56],
                     size_t len,
                     const EcContext *context);
-int ed448_decode_point(PointEd448 **out,
-                       const uint8_t *encoded,
-                       size_t len,
-                       const EcContext *context);
-int ed448_clone(PointEd448 **P, const PointEd448 *Q);
-void ed448_free_point(PointEd448 *p);
-int ed448_cmp(const PointEd448 *p1, const PointEd448 *p2);
-int ed448_neg(PointEd448 *p);
-int ed448_get_xy(uint8_t *xb, uint8_t *yb, size_t len, const PointEd448 *p);
-int ed448_double(PointEd448 *p);
-int ed448_add(PointEd448 *P1, const PointEd448 *P2);
-int ed448_scalar(PointEd448 *P, const uint8_t *scalar, size_t scalar_len, uint64_t seed);
-int ed448_scalar_public(PointEd448 *P, const uint8_t *scalar, size_t scalar_len);
 """
 
     _ed448_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", lib)
 
-    class EcLib:
-        new_point = _ed448_lib.ed448_new_point
-        decode_point = _ed448_lib.ed448_decode_point
-        clone = _ed448_lib.ed448_clone
-        free_point = _ed448_lib.ed448_free_point
-        cmp = _ed448_lib.ed448_cmp
-        neg = _ed448_lib.ed448_neg
-        get_xy = _ed448_lib.ed448_get_xy
-        double = _ed448_lib.ed448_double
-        add = _ed448_lib.ed448_add
-        scalar = _ed448_lib.ed448_scalar
-        scalar_public = _ed448_lib.ed448_scalar_public
+    class EcLib: new_point = _ed448_lib.ed448_new_point
 
     ed448_context = VoidPointer()
-    result = _ed448_lib.ed448_new_context(ed448_context.address_of())
-    if result:
-        raise ImportError("Error %d initializing Ed448 context" % result)
+    _ed448_lib.ed448_new_context(ed448_context.address_of())
 
     context = SmartPointer(ed448_context.get())
 
@@ -219,7 +192,6 @@ int ec_nat_new_curve(EcCurve **out,
                      const uint8_t *gx,
                      const uint8_t *gy,
                      size_t len);
-void ec_nat_free_curve(EcCurve *curve);
 int ec_nat_new_point(EcPoint **out,
                      const uint8_t *x,
                      const uint8_t *y,
@@ -230,33 +202,20 @@ int ec_nat_get_xy(uint8_t *x,
                   uint8_t *y,
                   size_t len,
                   const EcPoint *p);
-int ec_nat_double(EcPoint *p);
-int ec_nat_add(EcPoint *a, const EcPoint *b);
 int ec_nat_scalar(EcPoint *p,
                   const uint8_t *k,
                   size_t len,
                   uint64_t seed);
-int ec_nat_scalar_public(EcPoint *p,
-                         const uint8_t *k,
-                         size_t len);
 int ec_nat_clone(EcPoint **out, const EcPoint *p);
-int ec_nat_cmp(const EcPoint *a, const EcPoint *b);
-int ec_nat_neg(EcPoint *p);
 """
 
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
 
 class EcLib:
     new_point = _ec_lib.ec_nat_new_point
-    free_point = _ec_lib.ec_nat_free_point
     get_xy = _ec_lib.ec_nat_get_xy
-    double = _ec_lib.ec_nat_double
-    add = _ec_lib.ec_nat_add
     scalar = _ec_lib.ec_nat_scalar
-    scalar_public = _ec_lib.ec_nat_scalar_public
     clone = _ec_lib.ec_nat_clone
-    cmp = _ec_lib.ec_nat_cmp
-    neg = _ec_lib.ec_nat_neg
 
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
