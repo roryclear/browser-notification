@@ -1,6 +1,7 @@
-from Crypto.Math.Numbers import Integer
-from Crypto.Util._raw_api import SmartPointer, VoidPointer, load_pycryptodome_raw_lib
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 from _curve import _Curve
+from ECC import IntegerNat as Integer, SmartPointer, VoidPointer
+
 
 def curve25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
@@ -86,7 +87,7 @@ int curve448_cmp(const Curve448Point *ecp1, const Curve448Point *ecp2);
         None,
         448,
         "1.3.101.111",  # RFC8410
-        SmartPointer(curve448_context.get(), EcLib.free_context),
+        SmartPointer(curve448_context.get()),
         "Curve448",
         None,
         EcLib,
