@@ -1,11 +1,9 @@
-# This file is licensed under the BSD 2-Clause License.
-# See https://opensource.org/licenses/BSD-2-Clause for details.
+from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
-from Crypto.Math.Numbers import Integer
-from Crypto.Util._raw_api import SmartPointer, VoidPointer, load_pycryptodome_raw_lib
+from AES import VoidPointer
+from ECC import SmartPointer, IntegerNat as Integer
 
 from _curve import _Curve
-
 
 def ed25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
@@ -120,7 +118,7 @@ int ed448_scalar_public(PointEd448 *P, const uint8_t *scalar, size_t scalar_len)
     if result:
         raise ImportError("Error %d initializing Ed448 context" % result)
 
-    context = SmartPointer(ed448_context.get(), _ed448_lib.ed448_free_context)
+    context = SmartPointer(ed448_context.get())
 
     # The parameters of the curve are public
     ed448 = _Curve(
