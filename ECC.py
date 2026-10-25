@@ -388,37 +388,6 @@ def p521_curve():
 
     return _new_curve(p, b, order, Gx, Gy, 521, "1.3.132.0.35", "NIST P-521", "ecdsa-sha2-nistp521")
 
-class EccXPoint:
-    def __init__(self, x: Optional[Union[int, Any]], curve: Optional[str]) -> None:
-        self._curve = _curves[curve]
-        self.curve = self._curve.canonical
-
-        new_point = self._curve.rawlib.new_point
-
-        context = _curve_context(self._curve)
-
-        modulus_bytes = self.size_in_bytes()
-
-        if x is None:
-            xb = null_pointer
-        else:
-            xb = c_uint8_ptr(long_to_bytes(x, modulus_bytes))
-
-        raw_point = VoidPointer()
-        new_point(raw_point.address_of(), xb, modulus_bytes, context)
-
-        # Ensure that object disposal of this Python object will (eventually)
-        # free the memory allocated by the raw library for the EC point
-        self._point = SmartPointer(raw_point.get())
-
-    def size_in_bytes(self) -> int:
-        """Size of each coordinate, in bytes."""
-        return (self.size_in_bits() + 7) // 8
-
-    def size_in_bits(self) -> int:
-        """Size of each coordinate, in bits."""
-        return self._curve.modulus_bits
-
 class CurveID:
     P192 = 1
     P224 = 2
@@ -472,9 +441,7 @@ class _Curves:
         curve = self.curves.get(name)
         if curve is None:
             curve = self.load(name)
-            if name in self.curve25519_names or name in self.curve448_names:
-                curve.G = EccXPoint(curve.Gx, name)
-            else:
+            if not (name in self.curve25519_names or name in self.curve448_names):
                 curve.G = EccPoint(curve.Gx, curve.Gy, name)
         return curve
 
