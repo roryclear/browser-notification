@@ -734,53 +734,11 @@ class EccKey:
     def public_key(self) -> EccKey:
         return EccKey(curve=self._curve.canonical, point=self.pointQ)
 
-    def _export_SEC1(self, compress):
+    def _export_SEC1(self):
         modulus_bytes = self.pointQ.size_in_bytes()
-
         x, y = self.pointQ._xy
-        if compress:
-            if y.is_odd():
-                first_byte = b"\x03"
-            else:
-                first_byte = b"\x02"
-            public_key = first_byte + x.to_bytes(modulus_bytes)
-        else:
-            public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
+        public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
         return public_key
-
-    def export_key(
-        self,
-        *,
-        format: str,
-        passphrase: Optional[Union[bytes, str]] = None,
-        use_pkcs8: bool = True,
-        protection: Optional[str] = None,
-        compress: bool = False,
-        prot_params: Optional[ProtParams] = None,
-        randfunc: Optional[RNG] = None,
-        threads: int = 1,
-    ) -> Union[str, bytes]:
-        ext_format = format
-        private_only = {
-            "passphrase": passphrase,
-            "use_pkcs8": None if use_pkcs8 is True else use_pkcs8,
-            "protection": protection,
-            "prot_params": prot_params,
-            "randfunc": randfunc,
-            "threads": None if threads == 1 else threads,
-        }
-        unexpected = {k: v for k, v in private_only.items() if v is not None}
-        if unexpected:
-            raise ValueError("Unexpected parameters: '%s'" % unexpected)
-        if ext_format == "PEM":
-            return self._export_public_pem(compress)
-        elif ext_format == "DER":
-            return self._export_subjectPublicKeyInfo(compress)
-        elif ext_format == "SEC1":
-            return self._export_SEC1(compress)
-        else:
-            return self._export_openssh(compress)
-
 
 def generate(*, curve) -> EccKey:
     curve_name = curve
