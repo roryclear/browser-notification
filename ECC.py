@@ -141,35 +141,10 @@ int ed25519_new_point(Point **out,
                       const uint8_t x[32],
                       const uint8_t y[32],
                       size_t modsize,
-                      const void *context);
-int ed25519_decode_point(Point **out,
-                         const uint8_t *encoded,
-                         size_t len,
-                         const void *context);
-int ed25519_clone(Point **P, const Point *Q);
-void ed25519_free_point(Point *p);
-int ed25519_cmp(const Point *p1, const Point *p2);
-int ed25519_neg(Point *p);
-int ed25519_get_xy(uint8_t *xb, uint8_t *yb, size_t modsize, Point *p);
-int ed25519_double(Point *p);
-int ed25519_add(Point *P1, const Point *P2);
-int ed25519_scalar(Point *P, const uint8_t *scalar, size_t scalar_len, uint64_t seed);
-int ed25519_scalar_public(Point *P, const uint8_t *scalar, size_t scalar_len);
-""",
+                      const void *context);""",
     )
 
-    class EcLib:
-        new_point = _ed25519_lib.ed25519_new_point
-        decode_point = _ed25519_lib.ed25519_decode_point
-        clone = _ed25519_lib.ed25519_clone
-        free_point = _ed25519_lib.ed25519_free_point
-        cmp = _ed25519_lib.ed25519_cmp
-        neg = _ed25519_lib.ed25519_neg
-        get_xy = _ed25519_lib.ed25519_get_xy
-        double = _ed25519_lib.ed25519_double
-        add = _ed25519_lib.ed25519_add
-        scalar = _ed25519_lib.ed25519_scalar
-        scalar_public = _ed25519_lib.ed25519_scalar_public
+    class EcLib: new_point = _ed25519_lib.ed25519_new_point
 
     # The parameters of the curve are public
     ed25519 = _Curve(
