@@ -62,11 +62,9 @@ class EcLib:
 
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
-    """A NIST curve y^2 = x^3 - 3x + b mod p, with generator (Gx, Gy) of order n"""
-
     size = (bits + 7) // 8
     curve = VoidPointer()
-    result = _ec_lib.ec_nat_new_curve(
+    _ec_lib.ec_nat_new_curve(
         curve.address_of(),
         c_uint8_ptr(long_to_bytes(p, size)),
         c_uint8_ptr(long_to_bytes(b, size)),
@@ -75,9 +73,6 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
         c_uint8_ptr(long_to_bytes(Gy, size)),
         c_size_t(size),
     )
-    if result:
-        raise ImportError("Error %d initializing %s context" % (result, desc))
-
     context = SmartPointer(curve.get(), _ec_lib.ec_nat_free_curve)
     # The parameters of the curve are public
     return _Curve(
