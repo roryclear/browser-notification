@@ -12,7 +12,7 @@ import random, secrets
 import cffi
 import operator
 from abc import ABC
-from Crypto.PublicKey._point import _curves
+from _point import _curves
 null_pointer = cffi.FFI().NULL
 
 class Nat:
