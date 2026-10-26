@@ -200,9 +200,6 @@ int ec_nat_clone(EcPoint **out, const EcPoint *p);
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
 
 class EcLib:
-    new_point = _ec_lib.ec_nat_new_point
-    get_xy = _ec_lib.ec_nat_get_xy
-    scalar = _ec_lib.ec_nat_scalar
     clone = _ec_lib.ec_nat_clone
 
 
@@ -680,11 +677,9 @@ class EccPoint:
         xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
         yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
 
-        new_point = self._curve.rawlib.new_point
-
         raw_point = VoidPointer()
         context = _curve_context(self._curve)
-        new_point(raw_point.address_of(), xb, yb, modulus_bytes, context)
+        _ec_lib.ec_nat_new_point(raw_point.address_of(), xb, yb, modulus_bytes, context)
         self._point = SmartPointer(raw_point.get())
 
     def copy(self) -> EccPoint:return _copy_point(self)
@@ -719,9 +714,8 @@ class EccPoint:
         modulus_bytes = self.size_in_bytes()
         xb = bytearray(modulus_bytes)
         yb = bytearray(modulus_bytes)
-        get_xy = self._curve.rawlib.get_xy
         with c_uint8_ptr_out(xb) as xb_ptr, c_uint8_ptr_out(yb) as yb_ptr:
-            result = get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
+            result = _ec_lib.ec_nat_get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
         if result:
             raise ValueError("Error %d while encoding an EC point" % result)
         return xb, yb
@@ -746,9 +740,7 @@ class EccPoint:
         else:
             sb = _encode_scalar(scalar, self.size_in_bytes())
             sb_ptr, sb_len = sb, len(sb)
-            result = self._curve.rawlib.scalar(
-                self._point.get(), sb_ptr, sb_len, StrongRandom().getrandbits(64)
-            )
+            result = _ec_lib.ec_nat_scalar(self._point.get(), sb_ptr, sb_len, StrongRandom().getrandbits(64))
         if result:
             raise ValueError("Error %d during scalar multiplication" % result)
         return self
