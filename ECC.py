@@ -98,19 +98,6 @@ def ed25519_curve():
     Gx = 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A
     Gy = 0x6666666666666666666666666666666666666666666666666666666666666658
 
-    _ed25519_lib = load_pycryptodome_raw_lib(
-        "Crypto.PublicKey._ed25519",
-        """
-typedef void Point;
-int ed25519_new_point(Point **out,
-                      const uint8_t x[32],
-                      const uint8_t y[32],
-                      size_t modsize,
-                      const void *context);""",
-    )
-
-    class EcLib: new_point = _ed25519_lib.ed25519_new_point
-
     # The parameters of the curve are public
     ed25519 = _Curve(
         p=IntegerNat(p, public=True),
@@ -123,7 +110,7 @@ int ed25519_new_point(Point **out,
         context=None,
         canonical="Ed25519",
         openssh="ssh-ed25519",
-        rawlib=EcLib,
+        rawlib=None,
     )
     return ed25519
 
