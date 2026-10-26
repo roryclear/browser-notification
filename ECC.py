@@ -109,24 +109,8 @@ def ed448_curve():
     Gx = 0x4F1970C66BED0DED221D15A622BF36DA9E146570470F1767EA6DE324A3D3A46412AE1AF72AB66511433B80E18B00938E2626A82BC70CC05E
     Gy = 0x693F46716EB6BC248876203756C9C7624BEA73736CA3984087789C1E05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14
 
-    lib = """
-typedef void EcContext;
-typedef void PointEd448;
-int ed448_new_context(EcContext **pec_ctx);
-int ed448_new_point(PointEd448 **out,
-                    const uint8_t x[56],
-                    const uint8_t y[56],
-                    size_t len,
-                    const EcContext *context);
-"""
-
-    _ed448_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", lib)
-
-    class EcLib: new_point = _ed448_lib.ed448_new_point
 
     ed448_context = VoidPointer()
-    _ed448_lib.ed448_new_context(ed448_context.address_of())
-
     context = SmartPointer(ed448_context.get())
 
     # The parameters of the curve are public
@@ -141,7 +125,7 @@ int ed448_new_point(PointEd448 **out,
         context=context,
         canonical="Ed448",
         openssh=None,
-        rawlib=EcLib,
+        rawlib=None,
     )
     return ed448
 
