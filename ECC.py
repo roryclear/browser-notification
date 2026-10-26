@@ -18,8 +18,7 @@ from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 class _Curve:
     def __init__(
-        self, p, b, order, Gx, Gy, G, modulus_bits, oid, context, canonical, openssh, rawlib, validate=None
-    ):
+        self, p, b, order, Gx, Gy, G, modulus_bits, oid, context, canonical, openssh, rawlib):
         self.p = p
         self.b = b
         self.order = order
@@ -32,7 +31,6 @@ class _Curve:
         self.canonical = canonical
         self.openssh = openssh
         self.rawlib = rawlib
-        self.validate = validate
 
 def curve25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
@@ -64,7 +62,6 @@ int curve25519_new_point(Point **out,
         "Curve25519",
         None,
         EcLib,
-        None,
     )
     return curve25519
 
@@ -97,7 +94,6 @@ int curve448_new_context(Curve448Context **pec_ctx);
         "Curve448",
         None,
         EcLib,
-        None,
     )
 
     return curve448
