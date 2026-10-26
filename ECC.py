@@ -17,18 +17,15 @@ null_pointer = cffi.FFI().NULL
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 class _Curve:
-    def __init__(self, p=None, b=None, order=None, Gx=None, Gy=None, G=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
+    def __init__(self, p=None, order=None, Gx=None, Gy=None, G=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
         self.p = p
-        self.b = b
         self.order = order
         self.Gx = Gx
         self.Gy = Gy
-        self.G = G
         self.modulus_bits = modulus_bits
         self.oid = oid
         self.context = context
         self.canonical = canonical
-        self.openssh = openssh
         self.rawlib = rawlib
 
 def curve25519_curve():
@@ -50,7 +47,6 @@ int curve25519_new_point(Point **out,
 
     curve25519 = _Curve(
         p=IntegerNat(p),
-        b=None,
         order=IntegerNat(order),
         Gx=IntegerNat(9),
         Gy=None,
@@ -82,7 +78,6 @@ int curve448_new_context(Curve448Context **pec_ctx);
 
     curve448 = _Curve(
         p=IntegerNat(p),
-        b=None,
         order=IntegerNat(order),
         Gx=IntegerNat(5),
         Gy=None,
@@ -119,7 +114,6 @@ int ed25519_new_point(Point **out,
     # The parameters of the curve are public
     ed25519 = _Curve(
         p=IntegerNat(p, public=True),
-        b=None,
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
@@ -163,7 +157,6 @@ int ed448_new_point(PointEd448 **out,
     # The parameters of the curve are public
     ed448 = _Curve(
         p=IntegerNat(p, public=True),
-        b=None,
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
@@ -230,7 +223,6 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
 
     return _Curve(
         p=IntegerNat(p, public=True),
-        b=IntegerNat(b, public=True),
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
