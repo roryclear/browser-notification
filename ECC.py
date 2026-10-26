@@ -32,18 +32,6 @@ def curve25519_curve():
     p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
     order = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
 
-    _curve25519_lib = load_pycryptodome_raw_lib(
-        "Crypto.PublicKey._curve25519",
-        """
-typedef void Point;
-
-int curve25519_new_point(Point **out,
-                         const uint8_t x[32],
-                         size_t modsize,
-                         const void* context);""",
-    )
-
-    class EcLib: new_point = _curve25519_lib.curve25519_new_point
 
     curve25519 = _Curve(
         p=IntegerNat(p),
@@ -56,7 +44,7 @@ int curve25519_new_point(Point **out,
         context=None,
         canonical="Curve25519",
         openssh=None,
-        rawlib=EcLib,
+        rawlib=None,
     )
     return curve25519
 
