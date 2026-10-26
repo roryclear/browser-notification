@@ -17,8 +17,7 @@ null_pointer = cffi.FFI().NULL
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
 class _Curve:
-    def __init__(
-        self, p, b, order, Gx, Gy, G, modulus_bits, oid, context, canonical, openssh, rawlib):
+    def __init__(self, p=None, b=None, order=None, Gx=None, Gy=None, G=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
         self.p = p
         self.b = b
         self.order = order
@@ -50,18 +49,18 @@ int curve25519_new_point(Point **out,
     class EcLib: new_point = _curve25519_lib.curve25519_new_point
 
     curve25519 = _Curve(
-        IntegerNat(p),
-        None,
-        IntegerNat(order),
-        IntegerNat(9),
-        None,
-        None,
-        255,
-        "1.3.101.110",  # RFC8410
-        None,
-        "Curve25519",
-        None,
-        EcLib,
+        p=IntegerNat(p),
+        b=None,
+        order=IntegerNat(order),
+        Gx=IntegerNat(9),
+        Gy=None,
+        G=None,
+        modulus_bits=255,
+        oid="1.3.101.110",  # RFC8410
+        context=None,
+        canonical="Curve25519",
+        openssh=None,
+        rawlib=EcLib,
     )
     return curve25519
 
@@ -82,18 +81,18 @@ int curve448_new_context(Curve448Context **pec_ctx);
     EcLib.new_context(curve448_context.address_of())
 
     curve448 = _Curve(
-        IntegerNat(p),
-        None,
-        IntegerNat(order),
-        IntegerNat(5),
-        None,
-        None,
-        448,
-        "1.3.101.111",  # RFC8410
-        SmartPointer(curve448_context.get()),
-        "Curve448",
-        None,
-        EcLib,
+        p=IntegerNat(p),
+        b=None,
+        order=IntegerNat(order),
+        Gx=IntegerNat(5),
+        Gy=None,
+        G=None,
+        modulus_bits=448,
+        oid="1.3.101.111",  # RFC8410
+        context=SmartPointer(curve448_context.get()),
+        canonical="Curve448",
+        openssh=None,
+        rawlib=EcLib,
     )
 
     return curve448
@@ -119,18 +118,18 @@ int ed25519_new_point(Point **out,
 
     # The parameters of the curve are public
     ed25519 = _Curve(
-        IntegerNat(p, public=True),
-        None,
-        IntegerNat(order, public=True),
-        IntegerNat(Gx, public=True),
-        IntegerNat(Gy, public=True),
-        None,
-        255,
-        "1.3.101.112",  # RFC8410
-        None,
-        "Ed25519",
-        "ssh-ed25519",
-        EcLib,
+        p=IntegerNat(p, public=True),
+        b=None,
+        order=IntegerNat(order, public=True),
+        Gx=IntegerNat(Gx, public=True),
+        Gy=IntegerNat(Gy, public=True),
+        G=None,
+        modulus_bits=255,
+        oid="1.3.101.112",  # RFC8410
+        context=None,
+        canonical="Ed25519",
+        openssh="ssh-ed25519",
+        rawlib=EcLib,
     )
     return ed25519
 
@@ -163,18 +162,18 @@ int ed448_new_point(PointEd448 **out,
 
     # The parameters of the curve are public
     ed448 = _Curve(
-        IntegerNat(p, public=True),
-        None,
-        IntegerNat(order, public=True),
-        IntegerNat(Gx, public=True),
-        IntegerNat(Gy, public=True),
-        None,
-        448,
-        "1.3.101.113",  # RFC8410
-        context,
-        "Ed448",
-        None,
-        EcLib,
+        p=IntegerNat(p, public=True),
+        b=None,
+        order=IntegerNat(order, public=True),
+        Gx=IntegerNat(Gx, public=True),
+        Gy=IntegerNat(Gy, public=True),
+        G=None,
+        modulus_bits=448,
+        oid="1.3.101.113",  # RFC8410
+        context=context,
+        canonical="Ed448",
+        openssh=None,
+        rawlib=EcLib,
     )
     return ed448
 
@@ -228,19 +227,20 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
     )
     context = SmartPointer(curve.get())
     # The parameters of the curve are public
+
     return _Curve(
-        IntegerNat(p, public=True),
-        IntegerNat(b, public=True),
-        IntegerNat(order, public=True),
-        IntegerNat(Gx, public=True),
-        IntegerNat(Gy, public=True),
-        None,
-        bits,
-        oid,
-        context,
-        desc,
-        openssh,
-        EcLib,
+        p=IntegerNat(p, public=True),
+        b=IntegerNat(b, public=True),
+        order=IntegerNat(order, public=True),
+        Gx=IntegerNat(Gx, public=True),
+        Gy=IntegerNat(Gy, public=True),
+        G=None,
+        modulus_bits=bits,
+        oid=oid,
+        context=context,
+        canonical=desc,
+        openssh=openssh,
+        rawlib=EcLib,
     )
 
 
