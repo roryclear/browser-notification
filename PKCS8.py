@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Union
-from ECC import DerObjectId, DerOctetString
+from ECC import DerOctetString
 
 __all__ = ["wrap", "unwrap", "UnwrappedKey"]
 
@@ -12,7 +12,6 @@ class DerObject:
         asn1Id: Optional[Union[int, bytes]] = None,
         payload: bytes = b"",
         constructed: bool = False,
-        explicit: Optional[Union[int, bytes]] = None,
         value = 0
     ) -> None:
         self.value = value
@@ -63,14 +62,14 @@ class BytesIO_EOF:
 
     def read_byte(self) -> int: return self.read(1)[0]
 
+def decode_seq(seq, der_encoded):
+    result = DerObject.decode(seq, der_encoded)
+    return result
+
+
 class DerSequence(DerObject):
     def __init__(self):
         DerObject.__init__(self)
-    
-    def decode(self, der_encoded: bytes, strict: bool = False, nr_elements=None):
-        self._nr_elements = nr_elements
-        result = DerObject.decode(self, der_encoded)
-        return result
 
     def _decodeFromStream(self, s: BytesIO_EOF) -> None:
         self._seq = []
@@ -82,7 +81,6 @@ class DerSequence(DerObject):
             der = DerObject()
             der._decodeFromStream(p)
 
-            # Parse INTEGERs differently
             if der._tag_octet != 0x02:
                 self._seq.append(p.data_since_bookmark())
             else:
@@ -91,22 +89,10 @@ class DerSequence(DerObject):
                 derInt.decode(data)
                 self._seq.append(derInt.value)
 
-class UnwrappedKey(tuple[str, bytes, Optional[bytes]]):
-    public_key: Optional[bytes]
-
-    @classmethod
-    def _create(cls, oid: str, private_key: bytes, params: Optional[bytes],public_key: Optional[bytes]) -> UnwrappedKey:
-        result = cls((oid, private_key, params))
-        result.public_key = public_key
-        return result
+class UnwrappedKey(tuple[bytes, Optional[bytes]]): pass
 
 def unwrap(p8_private_key: bytes):
-    pk_info = DerSequence().decode(p8_private_key, nr_elements=(2, 3, 4, 5))
-    algo = DerSequence().decode(pk_info._seq[1], nr_elements=(1, 2))
-    algo_oid = DerObjectId().decode(algo._seq[0]).value
-    algo_params = None if len(algo._seq) == 1 else algo._seq[1]
+    pk_info = DerSequence().decode(p8_private_key)
+    algo = DerSequence().decode(pk_info._seq[1])
     private_key = DerOctetString().decode(pk_info._seq[2]).payload
-    public_key = None
-
-
-    return UnwrappedKey._create(algo_oid, private_key, algo_params, public_key)
+    return UnwrappedKey((private_key, algo._seq[1]))

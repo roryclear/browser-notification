@@ -1063,7 +1063,7 @@ def _import_rfc5915_der(
 def _import_pkcs8(encoded):
     import PKCS8
     unwrapped = PKCS8.unwrap(encoded)
-    _, private_key, params = unwrapped
+    private_key, params = unwrapped
     curve_oid = DerObjectId().decode(params).value
     key = _import_rfc5915_der(private_key, curve_oid)
     return key
