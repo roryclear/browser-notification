@@ -3,11 +3,12 @@ import cffi
 import os
 import struct
 import ECC
-import SHA256
 import base64, json
 import copy, time
 import secrets
 from urllib.parse import urlparse
+import hashlib
+
 
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
@@ -17,23 +18,36 @@ _GF_R = 0xE1000000000000000000000000000000
 SHA256_digest_size = 32
 SHA256_block_size = 64
 
+class SHA256Hash:
+    def __init__(self, data=None):
+        self._hash = hashlib.sha256()
+        if data: self.update(data)
+
+    def update(self, data): self._hash.update(data)
+
+    def digest(self) -> bytes: return self._hash.digest()
+
+    def copy(self):
+        clone = SHA256Hash()
+        clone._hash = self._hash.copy()
+        return clone
+        
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 class HMAC:
     def __init__(self, key, msg = b"") -> None:
         self.digest_size = SHA256_digest_size
-        self._digestmod = SHA256
         if len(key) <= SHA256_digest_size:
             key_0 = key + b"\x00" * (SHA256_block_size - len(key))
         else:
-            hash_k = SHA256.SHA256Hash(key).digest()
+            hash_k = SHA256Hash(key).digest()
             key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
 
         key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
-        self._inner = SHA256.SHA256Hash(key_0_ipad)
+        self._inner = SHA256Hash(key_0_ipad)
         self._inner.update(msg)
         key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
-        self._outer = SHA256.SHA256Hash(key_0_opad)
+        self._outer = SHA256Hash(key_0_opad)
 
     def digest(self) -> bytes:
         frozen_outer_hash = self._outer.copy()
