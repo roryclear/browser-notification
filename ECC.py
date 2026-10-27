@@ -14,9 +14,6 @@ import operator
 from abc import ABC
 null_pointer = cffi.FFI().NULL
 
-from Crypto.Util._raw_api import load_pycryptodome_raw_lib
-
-
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
     """Create a projective point from big-endian affine coordinates."""
     p = int(curve.p)
@@ -199,36 +196,9 @@ def ed448_curve():
     )
     return ed448
 
-_ec_cdecl = """
-typedef void EcCurve;
-typedef void EcPoint;
-int ec_nat_new_curve(EcCurve **out,
-                     const uint8_t *p,
-                     const uint8_t *b,
-                     const uint8_t *order,
-                     const uint8_t *gx,
-                     const uint8_t *gy,
-                     size_t len);
-"""
-
-_ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
-
-
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
-    size = (bits + 7) // 8
     curve = VoidPointer()
-    _ec_lib.ec_nat_new_curve(
-        curve.address_of(),
-        c_uint8_ptr(long_to_bytes(p, size)),
-        c_uint8_ptr(long_to_bytes(b, size)),
-        c_uint8_ptr(long_to_bytes(order, size)),
-        c_uint8_ptr(long_to_bytes(Gx, size)),
-        c_uint8_ptr(long_to_bytes(Gy, size)),
-        size,
-    )
     context = SmartPointer(curve.get())
-    # The parameters of the curve are public
-
     return _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
