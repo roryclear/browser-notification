@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Union
-from ECC import DerOctetString
+from ECC import DerObject
 
 __all__ = ["wrap", "unwrap", "UnwrappedKey"]
 
@@ -61,5 +61,5 @@ class DerSequence:
 def unwrap(p8_private_key: bytes):
     pk_info = DerSequence().decode(p8_private_key)
     algo = DerSequence().decode(pk_info._seq[1])
-    private_key = DerOctetString().decode(pk_info._seq[2]).payload
+    private_key = DerObject().decode(pk_info._seq[2]).payload
     return (private_key, algo._seq[1])

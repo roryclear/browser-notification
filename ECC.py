@@ -714,24 +714,11 @@ class BytesIO_EOF:
         return self.read(1)[0]
 
 class DerObject:
-    def __init__(
-        self,
-        asn1Id: Optional[Union[int, bytes]] = None,
-        payload: bytes = b"",
-        implicit: Optional[Union[int, bytes]] = None,
-        constructed: bool = False,
-        explicit: Optional[Union[int, bytes]] = None,
-    ) -> None:
-        self._tag_octet: Optional[int]
-        # The tag octet will be read in with ``decode``
-        self._tag_octet = None
-        return
-
     def _decodeLen(self, s: BytesIO_EOF) -> int:
         length = s.read_byte()
         return length
 
-    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+    def decode(self, der_encoded: bytes, strict: bool = False):
         s = BytesIO_EOF(der_encoded)
         self._decodeFromStream(s, strict)
         return self
@@ -815,21 +802,6 @@ class DerObject:
         asn1Id = self._convertTag(asn1Id)
 
         self.payload = payload
-
-        # In a BER/DER identifier octet:
-        # * bits 4-0 contain the tag value
-        # * bit 5 is set if the type is 'constructed'
-        #   and unset if 'primitive'
-        # * bits 7-6 depend on the encoding class
-        #
-        # Class        | Bit 7, Bit 6
-        # ----------------------------------
-        # universal    |   0      0
-        # application  |   0      1
-        # context-spec |   1      0 (default for IMPLICIT/EXPLICIT)
-        # private      |   1      1
-        #
-
         constructed_bit = 0x20 if constructed else 0x00
 
 
@@ -874,11 +846,6 @@ class DerObject:
                 raise ValueError("Unexpected internal DER tag")
             length = self._decodeLen(p)
             self.payload = p.read(length)
-
-
-class DerOctetString(DerObject):
-    def __init__(self, value: bytes = b"", implicit: Optional[Union[int, bytes]] = None) -> None:
-        DerObject.__init__(self, 0x04, value, implicit, False)
 
 class DerBitString(DerObject):
     def __init__(
@@ -1040,7 +1007,7 @@ def _import_rfc5915_der(
     encoded: bytes, curve_oid: Optional[str] = None
 ) -> EccKey:
     ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
-    scalar_bytes = DerOctetString().decode(ec_private_key[1]).payload
+    scalar_bytes = DerObject().decode(ec_private_key[1]).payload
     next_element = 2
 
     for curve_name, curve in _Curves().items():
