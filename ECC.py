@@ -144,7 +144,6 @@ int ec_nat_new_point(EcPoint **out,
                      const uint8_t *y,
                      size_t len,
                      const EcCurve *curve);
-void ec_nat_free_point(EcPoint *p);
 int ec_nat_get_xy(uint8_t *x,
                   uint8_t *y,
                   size_t len,
@@ -158,8 +157,7 @@ int ec_nat_clone(EcPoint **out, const EcPoint *p);
 
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
 
-class EcLib:
-    clone = _ec_lib.ec_nat_clone
+class EcLib: pass
 
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
@@ -188,7 +186,7 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
         context=context,
         canonical=desc,
         openssh=openssh,
-        rawlib=EcLib,
+        rawlib=None,
     )
 
 
@@ -580,7 +578,7 @@ def _copy_point(point):
 
 def _clone_raw_point(curve, point) -> SmartPointer:
     raw_point = VoidPointer()
-    curve.rawlib.clone(raw_point.address_of(), point._point.get())
+    _ec_lib.ec_nat_clone(raw_point.address_of(), point._point.get())
     return SmartPointer(raw_point.get())
 
 class StrongRandom:
