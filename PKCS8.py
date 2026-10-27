@@ -88,11 +88,9 @@ class DerSequence(DerObject):
                 data = p.data_since_bookmark()
                 derInt.decode(data)
                 self._seq.append(derInt.value)
-
-class UnwrappedKey(tuple[bytes, Optional[bytes]]): pass
-
+                
 def unwrap(p8_private_key: bytes):
     pk_info = DerSequence().decode(p8_private_key)
     algo = DerSequence().decode(pk_info._seq[1])
     private_key = DerOctetString().decode(pk_info._seq[2]).payload
-    return UnwrappedKey((private_key, algo._seq[1]))
+    return (private_key, algo._seq[1])
