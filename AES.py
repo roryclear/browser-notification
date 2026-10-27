@@ -98,7 +98,7 @@ class Vapid:
     def sign(self, claims):
         token = sign(self._base_sign(claims), self._private_key)
 
-        public_key = self._public_key.export_key(format="SEC1")
+        public_key = self._public_key._export_SEC1()
 
         return {
             "Authorization": "{} t={},k={}".format(
@@ -125,7 +125,7 @@ def derive_key(salt, private_key, dh, auth_secret):
     shared_point = receiver_pub.pointQ * private_key._d
     secret = int(shared_point.x).to_bytes(32, "big")
 
-    sender_pub = private_key.public_key().export_key(format="SEC1")
+    sender_pub = private_key.public_key()._export_SEC1()
 
     context = b"WebPush: info\x00" + dh + sender_pub
 
@@ -222,7 +222,7 @@ def aes_encrypt(content, headers=None):
         )
         counter += 1
 
-    public_key = private_key.public_key().export_key(format="SEC1")
+    public_key = private_key.public_key()._export_SEC1()
 
     headers.update({"Content-Encoding": "aes128gcm", "TTL": "60",})
 
