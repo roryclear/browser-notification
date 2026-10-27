@@ -87,7 +87,7 @@ def _py_scalar_mul(point: dict, k: int, curve: "_Curve") -> dict:
     return {"x": result[0], "y": result[1], "z": 1}
 
 class _Curve:
-    def __init__(self, p=None, order=None, Gx=None, Gy=None, G=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
+    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
         self.p = p
         self.order = order
         self.Gx = Gx
@@ -108,7 +108,6 @@ def curve25519_curve():
         order=IntegerNat(order),
         Gx=IntegerNat(9),
         Gy=None,
-        G=None,
         modulus_bits=255,
         oid="1.3.101.110",  # RFC8410
         context=None,
@@ -130,7 +129,6 @@ def curve448_curve():
         order=IntegerNat(order),
         Gx=IntegerNat(5),
         Gy=None,
-        G=None,
         modulus_bits=448,
         oid="1.3.101.111",  # RFC8410
         context=SmartPointer(curve448_context.get()),
@@ -147,13 +145,11 @@ def ed25519_curve():
     Gx = 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A
     Gy = 0x6666666666666666666666666666666666666666666666666666666666666658
 
-    # The parameters of the curve are public
     ed25519 = _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
-        G=None,
         modulus_bits=255,
         oid="1.3.101.112",  # RFC8410
         context=None,
@@ -174,13 +170,11 @@ def ed448_curve():
     ed448_context = VoidPointer()
     context = SmartPointer(ed448_context.get())
 
-    # The parameters of the curve are public
     ed448 = _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
-        G=None,
         modulus_bits=448,
         oid="1.3.101.113",  # RFC8410
         context=context,
@@ -198,7 +192,6 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
         order=IntegerNat(order, public=True),
         Gx=IntegerNat(Gx, public=True),
         Gy=IntegerNat(Gy, public=True),
-        G=None,
         modulus_bits=bits,
         oid=oid,
         context=context,
@@ -318,9 +311,6 @@ class _Curves:
         for name in self.all_names:
             _ = self[name]
         return self.curves.items()
-
-
-_curves = _Curves()
 
 class Nat:
     def __init__(self, bits: int):
@@ -621,7 +611,7 @@ Int = Union[int, Any]
 
 class EccPoint:
     def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
-        self._curve = _curves[curve]
+        self._curve = _Curves()[curve]
         self.curve = "NIST P-256"
 
         modulus_bytes = self.size_in_bytes()
@@ -969,7 +959,7 @@ class EccKey:
         self._d: Any = cast(Any, d)
         self._seed: Any = cast(Any, seed)
         self._point: Any = cast(Any, point)
-        self._curve = _curves[curve]
+        self._curve = _Curves()[curve]
 
     # ECDSA
     def _sign(self, z, k):
@@ -1002,7 +992,7 @@ class EccKey:
 
 def generate(*, curve) -> EccKey:
     curve_name = curve
-    curve_info = _curves[curve_name]
+    curve_info = _Curves()[curve_name]
     d = random.randrange(1, curve_info.order)
     new_key = EccKey(curve=curve_name, d=d)
 
@@ -1023,7 +1013,7 @@ def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
 
 
 def _import_public_der(ec_point, curve_oid=None, curve_name=None):
-    for _curve_name, curve in _curves.items():
+    for _curve_name, curve in _Curves().items():
         if curve_oid and curve.oid == curve_oid:
             break
         if curve_name == _curve_name:
@@ -1041,7 +1031,7 @@ def _import_rfc5915_der(
     scalar_bytes = DerOctetString().decode(ec_private_key[1]).payload
     next_element = 2
 
-    for curve_name, curve in _curves.items():
+    for curve_name, curve in _Curves().items():
         if curve.oid == curve_oid:
             break
 
