@@ -36,9 +36,8 @@ class DerObject:
         self._decodeFromStream(s)
         return self
 
-    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
-        idOctet = s.read_byte()
-        self._tag_octet = idOctet
+    def _decodeFromStream(self, s: BytesIO_EOF):
+        s.read_byte()
         length = self._decodeLen(s)
         self.payload = s.read(length)
 
