@@ -143,7 +143,6 @@ int ec_nat_scalar(EcPoint *p,
                   const uint8_t *k,
                   size_t len,
                   uint64_t seed);
-int ec_nat_clone(EcPoint **out, const EcPoint *p);
 """
 
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
@@ -566,8 +565,16 @@ def _copy_point(point):
     return copy
 
 def _clone_raw_point(curve, point) -> SmartPointer:
+    modulus_bytes = point.size_in_bytes()
+    xb, yb = point._get_xy_bytes()
     raw_point = VoidPointer()
-    _ec_lib.ec_nat_clone(raw_point.address_of(), point._point.get())
+    _ec_lib.ec_nat_new_point(
+        raw_point.address_of(),
+        bytes(xb),
+        bytes(yb),
+        modulus_bytes,
+        _curve_context(curve),
+    )
     return SmartPointer(raw_point.get())
 
 class StrongRandom:
@@ -661,9 +668,7 @@ class EccPoint:
         xb = bytearray(modulus_bytes)
         yb = bytearray(modulus_bytes)
         with c_uint8_ptr_out(xb) as xb_ptr, c_uint8_ptr_out(yb) as yb_ptr:
-            result = _ec_lib.ec_nat_get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
-        if result:
-            raise ValueError("Error %d while encoding an EC point" % result)
+            _ec_lib.ec_nat_get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
         return xb, yb
 
     def size_in_bytes(self) -> int:
