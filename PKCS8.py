@@ -77,17 +77,13 @@ class DerSequence(DerObject):
         p = BytesIO_EOF(self.payload)
         while p.remaining_data() > 0:
             p.set_bookmark()
-
             der = DerObject()
             der._decodeFromStream(p)
 
             if der._tag_octet != 0x02:
                 self._seq.append(p.data_since_bookmark())
             else:
-                derInt = DerObject()
-                data = p.data_since_bookmark()
-                derInt.decode(data)
-                self._seq.append(derInt.value)
+                self._seq.append(0)
                 
 def unwrap(p8_private_key: bytes):
     pk_info = DerSequence().decode(p8_private_key)
