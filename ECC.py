@@ -713,30 +713,10 @@ class BytesIO_EOF:
     def read_byte(self) -> int:
         return self.read(1)[0]
 
-class DerObject:
-    def decode(self, der_encoded: bytes):
-        s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s)
-        return self
+class DerObjectId:
+    def __init__(self): pass
 
-    def _decodeFromStream(self, s: BytesIO_EOF):
-        idOctet = s.read_byte()
-        self._tag_octet = idOctet
-        length = s.read_byte()
-        self.payload = s.read(length)
-
-
-class DerObjectId(DerObject):
-    def __init__(
-        self,
-        value: str = "",
-        implicit: Optional[Union[int, bytes]] = None,
-        explicit: Optional[Union[int, bytes]] = None,
-    ) -> None:
-        DerObject.__init__(self, 0x06, b"", implicit, False, explicit)
-        self.value = value
-
-    def decode(self, der_encoded: bytes) -> DerObjectId: return DerObject.decode(self, der_encoded)
+    def decode(self, der_encoded: bytes): return DerObject.decode(self, der_encoded)
 
     def _decodeFromStream(self, s):
         DerObject._decodeFromStream(self, s)
@@ -795,27 +775,20 @@ class DerObject:
             # The tag octet will be read in with ``decode``
             self._tag_octet = None
             return
-        asn1Id = self._convertTag(asn1Id)
 
         self.payload = payload
         constructed_bit = 0x20 if constructed else 0x00
 
 
-        if implicit is not None:
-            # IMPLICIT tag overrides asn1Id
-            self._tag_octet = 0x80 | constructed_bit | self._convertTag(implicit)
-        elif explicit is not None:
+        if explicit is not None:
             # 'constructed bit' is always asserted for an EXPLICIT tag
-            self._tag_octet = 0x80 | 0x20 | self._convertTag(explicit)
+            self._tag_octet = 0x80 | 0x20 | explicit
             self._inner_tag_octet = constructed_bit | asn1Id
         else:
             # Neither IMPLICIT nor EXPLICIT
             self._tag_octet = constructed_bit | asn1Id
 
-    def _convertTag(self, tag: Union[int, bytes]) -> int:
-        return tag
-
-    def decode(self: _DerObjectT, der_encoded: bytes):
+    def decode(self, der_encoded: bytes):
         s = BytesIO_EOF(der_encoded)
         self._decodeFromStream(s)
         return self
