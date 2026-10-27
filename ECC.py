@@ -16,6 +16,85 @@ null_pointer = cffi.FFI().NULL
 
 from Crypto.Util._raw_api import load_pycryptodome_raw_lib
 
+
+def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
+    """Create a projective point from big-endian affine coordinates."""
+    p = int(curve.p)
+    x = int.from_bytes(xb, "big") % p
+    y = int.from_bytes(yb, "big") % p
+    if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}  # point at infinity
+    return {"x": x, "y": y, "z": 1}
+
+
+def _py_clone_point(point: dict) -> dict:
+    return {"x": point["x"], "y": point["y"], "z": point["z"]}
+
+
+def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
+    p = int(curve.p)
+    X, Y, Z = point["x"], point["y"], point["z"]
+    if Z % p == 0:
+        return bytearray(modulus_bytes), bytearray(modulus_bytes)
+    Zinv = pow(Z, -1, p)
+    x = (X * Zinv) % p
+    y = (Y * Zinv) % p
+    return (bytearray(x.to_bytes(modulus_bytes, "big")),
+            bytearray(y.to_bytes(modulus_bytes, "big")))
+
+
+def _affine_double(P, p: int, a: int = -3):
+    if P is None:
+        return None
+    x, y = P
+    if y % p == 0:
+        return None
+    lam = ((3 * x * x + a) * pow(2 * y, -1, p)) % p
+    x3 = (lam * lam - 2 * x) % p
+    y3 = (lam * (x - x3) - y) % p
+    return (x3, y3)
+
+
+def _affine_add(P, Q, p: int, a: int = -3):
+    if P is None:
+        return Q
+    if Q is None:
+        return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2:
+        if (y1 + y2) % p == 0:
+            return None
+        return _affine_double(P, p, a)
+    lam = ((y2 - y1) * pow(x2 - x1, -1, p)) % p
+    x3 = (lam * lam - x1 - x2) % p
+    y3 = (lam * (x1 - x3) - y1) % p
+    return (x3, y3)
+
+
+def _py_scalar_mul(point: dict, k: int, curve: "_Curve") -> dict:
+    """Simple double-and-add (functionally equivalent, not constant-time)."""
+    p = int(curve.p)
+    if curve.order is not None:
+        k = k % int(curve.order)
+    if k == 0 or point["z"] % p == 0:
+        return {"x": 0, "y": 1, "z": 0}
+
+    Zinv = pow(point["z"], -1, p)
+    ax = (point["x"] * Zinv) % p
+    ay = (point["y"] * Zinv) % p
+
+    result = None
+    addend = (ax, ay)
+    for bit in bin(k)[2:]:
+        if result is not None:
+            result = _affine_double(result, p)
+        if bit == "1":
+            result = _affine_add(result, addend, p)
+
+    if result is None:
+        return {"x": 0, "y": 1, "z": 0}
+    return {"x": result[0], "y": result[1], "z": 1}
+
 class _Curve:
     def __init__(self, p=None, order=None, Gx=None, Gy=None, G=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
         self.p = p
@@ -130,11 +209,6 @@ int ec_nat_new_curve(EcCurve **out,
                      const uint8_t *gx,
                      const uint8_t *gy,
                      size_t len);
-int ec_nat_new_point(EcPoint **out,
-                     const uint8_t *x,
-                     const uint8_t *y,
-                     size_t len,
-                     const EcCurve *curve);
 int ec_nat_get_xy(uint8_t *x,
                   uint8_t *y,
                   size_t len,
@@ -564,18 +638,8 @@ def _copy_point(point):
     copy._point = _clone_raw_point(point._curve, point)
     return copy
 
-def _clone_raw_point(curve, point) -> SmartPointer:
-    modulus_bytes = point.size_in_bytes()
-    xb, yb = point._get_xy_bytes()
-    raw_point = VoidPointer()
-    _ec_lib.ec_nat_new_point(
-        raw_point.address_of(),
-        bytes(xb),
-        bytes(yb),
-        modulus_bytes,
-        _curve_context(curve),
-    )
-    return SmartPointer(raw_point.get())
+def _clone_raw_point(curve, point) -> dict:
+    return _py_clone_point(point._point)
 
 class StrongRandom:
     def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
@@ -629,11 +693,7 @@ class EccPoint:
         p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
         xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
         yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
-
-        raw_point = VoidPointer()
-        context = _curve_context(self._curve)
-        _ec_lib.ec_nat_new_point(raw_point.address_of(), xb, yb, modulus_bytes, context)
-        self._point = SmartPointer(raw_point.get())
+        self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
 
     def copy(self) -> EccPoint:return _copy_point(self)
 
@@ -663,13 +723,8 @@ class EccPoint:
         xb, yb = self._get_xy_bytes()
         return (IntegerNat.from_bytes(xb), IntegerNat.from_bytes(yb))
 
-    def _get_xy_bytes(self) -> tuple[bytearray, bytearray]:
-        modulus_bytes = self.size_in_bytes()
-        xb = bytearray(modulus_bytes)
-        yb = bytearray(modulus_bytes)
-        with c_uint8_ptr_out(xb) as xb_ptr, c_uint8_ptr_out(yb) as yb_ptr:
-            _ec_lib.ec_nat_get_xy(xb_ptr, yb_ptr, modulus_bytes, self._point.get())
-        return xb, yb
+    def _get_xy_bytes(self) -> tuple:
+        return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
 
     def size_in_bytes(self) -> int:
         """Size of each coordinate, in bytes."""
@@ -680,20 +735,8 @@ class EccPoint:
         return self._curve.modulus_bits
 
 
-
-    def __imul__(self, scalar: int) -> EccPoint:
-        # A public scalar: no blinding, and only as many bits as needed
-        public_func = getattr(self._curve.rawlib, "scalar_public", None)
-        if public_func is not None and isinstance(scalar, IntegerBase) and scalar._public:
-            sb = scalar.to_bytes()
-            sb_ptr, sb_len = sb, len(sb)
-            result = public_func(self._point.get(), sb_ptr, sb_len)
-        else:
-            sb = _encode_scalar(scalar, self.size_in_bytes())
-            sb_ptr, sb_len = sb, len(sb)
-            result = _ec_lib.ec_nat_scalar(self._point.get(), sb_ptr, sb_len, StrongRandom().getrandbits(64))
-        if result:
-            raise ValueError("Error %d during scalar multiplication" % result)
+    def __imul__(self, scalar: int) -> "EccPoint":
+        self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
         return self
 
     def __mul__(self, scalar: int) -> EccPoint:
@@ -1111,3 +1154,4 @@ def import_key(
     # SEC1
     if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04):
         return _import_public_der(encoded, curve_name=curve_name)
+
