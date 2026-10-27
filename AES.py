@@ -7,7 +7,7 @@ from KDF import HKDF
 import SHA256
 import base64, json
 import copy, time
-from DSS import FipsEcDsaSigScheme
+import secrets
 from urllib.parse import urlparse
 
 KEY_LENGTH = 16
@@ -15,6 +15,30 @@ NONCE_LENGTH = 12
 
 _GF_R = 0xE1000000000000000000000000000000
 
+class DssSigScheme:
+    def __init__(self, key: Union[Any, Any], order: Any) -> None:
+        self._key = key
+        self._order = order
+
+        self._order_bits = self._order.size_in_bits()
+        self._order_bytes = (self._order_bits - 1) // 8 + 1
+
+    def sign(self, msg_hash) -> bytes:
+        nonce = self._compute_nonce()
+        z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
+        sig_pair = self._key._sign(z, nonce)
+        output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
+        return output
+
+class FipsEcDsaSigScheme(DssSigScheme):
+    def __init__(self, key: Any) -> None:
+        order = key._curve.order
+        super().__init__(key, order)
+        self._randfunc = None
+
+    def _compute_nonce(self):
+        n = int(self._key._curve.order)
+        return secrets.randbelow(n - 1) + 1
 
 def _gf_mult(x: int, y: int) -> int:
     z = 0
