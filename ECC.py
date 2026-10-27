@@ -209,14 +209,6 @@ int ec_nat_new_curve(EcCurve **out,
                      const uint8_t *gx,
                      const uint8_t *gy,
                      size_t len);
-int ec_nat_get_xy(uint8_t *x,
-                  uint8_t *y,
-                  size_t len,
-                  const EcPoint *p);
-int ec_nat_scalar(EcPoint *p,
-                  const uint8_t *k,
-                  size_t len,
-                  uint64_t seed);
 """
 
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
