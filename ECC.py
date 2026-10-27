@@ -9,29 +9,23 @@ from typing import (
     cast,
 )
 import random, secrets
-import cffi
 import operator
 from abc import ABC
-null_pointer = cffi.FFI().NULL
 
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
-    """Create a projective point from big-endian affine coordinates."""
     p = int(curve.p)
     x = int.from_bytes(xb, "big") % p
     y = int.from_bytes(yb, "big") % p
-    if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}  # point at infinity
+    if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
     return {"x": x, "y": y, "z": 1}
 
 
-def _py_clone_point(point: dict) -> dict:
-    return {"x": point["x"], "y": point["y"], "z": point["z"]}
-
+def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
 
 def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
     p = int(curve.p)
     X, Y, Z = point["x"], point["y"], point["z"]
-    if Z % p == 0:
-        return bytearray(modulus_bytes), bytearray(modulus_bytes)
+    if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
     Zinv = pow(Z, -1, p)
     x = (X * Zinv) % p
     y = (Y * Zinv) % p
@@ -342,16 +336,6 @@ class Nat:
     def get(self) -> int:
         return self.value
 
-def _new_nat(bits: int) -> Nat:
-    return Nat(bits)
-
-
-def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
-    result = cffi.FFI().new("uint8_t[]", init_or_size)
-    return result
-
-def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
-
 def _encode_coordinate(value: Union[int, IntegerBase], length: int) -> bytes:
     encoded = long_to_bytes(int(value), length)
     return encoded
@@ -364,9 +348,6 @@ def long_to_bytes(n: int, blocksize: int = 0) -> bytes:
     length = max((n.bit_length() + 7) // 8, 1)
     if blocksize > 0: length = ceil_div(length, blocksize) * blocksize
     return n.to_bytes(length, "big")
-
-def _curve_context(curve: _Curve) -> Any:
-    return null_pointer if curve.context is None else curve.context.get()
 
 class IntegerBase(ABC):
     _public: bool = False
@@ -583,9 +564,6 @@ class IntegerNat(IntegerBase):
         result = IntegerNat(self, self._bits, public=self._public)
         return result.inplace_inverse(modulus)
 
-
-def c_uint8_ptr(data: Union[bytes, memoryview, bytearray]) -> Any: return cffi.FFI().from_buffer("uint8_t[]", data)
-
 def ceil_div(n: int, d: int) -> int:
     r, q = divmod(n, d)
     if (n != 0) and (q != 0): r += 1
@@ -623,12 +601,11 @@ class c_uint8_ptr_out:
         self._data = data
         self._copy: Any = None
 
-    def __enter__(self) -> Any: return c_uint8_ptr(self._data)
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None: pass
 
 class VoidPointer:
-    def __init__(self): self._pp = cffi.FFI().new("void *[1]")
-    def get(self): return self._pp[0]
+    def __init__(self): pass
+    def get(self): pass
     def address_of(self): return self._pp
 
 
