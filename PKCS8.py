@@ -11,25 +11,21 @@ class DerObject:
         self,
         asn1Id: Optional[Union[int, bytes]] = None,
         payload: bytes = b"",
-        implicit: Optional[Union[int, bytes]] = None,
         constructed: bool = False,
         explicit: Optional[Union[int, bytes]] = None,
+        value = 0
     ) -> None:
+        self.value = value
         self._tag_octet: Optional[int]
         if asn1Id is None:
             self._tag_octet = None
             return
-        asn1Id = self._convertTag(asn1Id)
 
         self.payload = payload
         constructed_bit = 0x20 if constructed else 0x00
         self._tag_octet = constructed_bit | asn1Id
 
-    def _convertTag(self, tag: Union[int, bytes]) -> int:
-        return tag
-
     def _decodeLen(self, s: BytesIO_EOF) -> int:
-        """Decode DER length octets from a file."""
         length = s.read_byte()
         if length > 127:
             encoded_length = s.read(length & 0x7F)
@@ -46,17 +42,6 @@ class DerObject:
         self._tag_octet = idOctet
         length = self._decodeLen(s)
         self.payload = s.read(length)
-
-class DerInteger(DerObject):
-    def __init__(
-        self,
-        value: int = 0,
-        implicit: Optional[Union[int, bytes]] = None,
-        explicit: Optional[Union[int, bytes]] = None,
-    ) -> None:
-        DerObject.__init__(self, 0x02, b"", implicit, False, explicit)
-        self.value = value
-
 
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
@@ -79,8 +64,8 @@ class BytesIO_EOF:
     def read_byte(self) -> int: return self.read(1)[0]
 
 class DerSequence(DerObject):
-    def __init__(self, implicit=None, explicit=None):
-        DerObject.__init__(self, 0x10, b"", implicit, True, explicit)
+    def __init__(self):
+        DerObject.__init__(self)
     
     def decode(self, der_encoded: bytes, strict: bool = False, nr_elements=None):
         self._nr_elements = nr_elements
@@ -101,7 +86,7 @@ class DerSequence(DerObject):
             if der._tag_octet != 0x02:
                 self._seq.append(p.data_since_bookmark())
             else:
-                derInt = DerInteger()
+                derInt = DerObject()
                 data = p.data_since_bookmark()
                 derInt.decode(data, strict=strict)
                 self._seq.append(derInt.value)
