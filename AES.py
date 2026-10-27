@@ -17,43 +17,43 @@ _GF_R = 0xE1000000000000000000000000000000
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 class HMAC:
-    def __init__(self, key, msg = b"", digestmod =None) -> None:
-        self.digest_size = digestmod.digest_size
-        self._digestmod = digestmod
+    def __init__(self, key, msg = b"") -> None:
+        self.digest_size = SHA256.digest_size
+        self._digestmod = SHA256
     
-        if len(key) <= digestmod.block_size:
-            key_0 = key + b"\x00" * (digestmod.block_size - len(key))
+        if len(key) <= SHA256.block_size:
+            key_0 = key + b"\x00" * (SHA256.block_size - len(key))
         else:
-            hash_k = digestmod.new(key).digest()
-            key_0 = hash_k + b"\x00" * (digestmod.block_size - len(hash_k))
+            hash_k = SHA256.new(key).digest()
+            key_0 = hash_k + b"\x00" * (SHA256.block_size - len(hash_k))
 
         key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
-        self._inner = digestmod.new(key_0_ipad)
+        self._inner = SHA256.new(key_0_ipad)
         self._inner.update(msg)
         key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
-        self._outer = digestmod.new(key_0_opad)
+        self._outer = SHA256.new(key_0_opad)
 
     def digest(self) -> bytes:
         frozen_outer_hash = self._outer.copy()
         frozen_outer_hash.update(self._inner.digest())
         return frozen_outer_hash.digest()
 
-def _HKDF_expand(prk, info, L: int, hashmod) -> bytes:
+def _HKDF_expand(prk, info, L: int) -> bytes:
     t = [b""]
     n = 1
     tlen = 0
     while tlen < L:
-        hmac = HMAC(prk, t[-1] + info + struct.pack("B", n), digestmod=hashmod)
+        hmac = HMAC(prk, t[-1] + info + struct.pack("B", n))
         t.append(hmac.digest())
-        tlen += hashmod.digest_size
+        tlen += SHA256.digest_size
         n += 1
     okm = b"".join(t)
     return okm[:L]
 
 
-def HKDF(master, key_len, salt, hashmod, context):
-    prk = HMAC(salt, master, digestmod=hashmod).digest()
-    okm = _HKDF_expand(prk, context, key_len, hashmod)
+def HKDF(master, key_len, salt, context):
+    prk = HMAC(salt, master).digest()
+    okm = _HKDF_expand(prk, context, key_len)
     return okm[:key_len]
 
 class DssSigScheme:
@@ -198,7 +198,6 @@ def derive_key(salt, private_key, dh, auth_secret):
         secret,
         32,
         auth_secret,
-        SHA256,
         context=context,
     )
 
@@ -206,7 +205,6 @@ def derive_key(salt, private_key, dh, auth_secret):
         secret,
         KEY_LENGTH,
         salt,
-        SHA256,
         context=b"Content-Encoding: aes128gcm\x00",
     )
 
@@ -214,7 +212,6 @@ def derive_key(salt, private_key, dh, auth_secret):
         secret,
         NONCE_LENGTH,
         salt,
-        SHA256,
         context=b"Content-Encoding: nonce\x00",
     )
 
