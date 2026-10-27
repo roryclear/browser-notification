@@ -32,12 +32,12 @@ class DerObject:
             length = bytes_to_long(encoded_length)
         return length
 
-    def decode(self, der_encoded: bytes, strict: bool = False):
+    def decode(self, der_encoded: bytes):
         s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s, strict)
+        self._decodeFromStream(s)
         return self
 
-    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
         idOctet = s.read_byte()
         self._tag_octet = idOctet
         length = self._decodeLen(s)
@@ -69,18 +69,18 @@ class DerSequence(DerObject):
     
     def decode(self, der_encoded: bytes, strict: bool = False, nr_elements=None):
         self._nr_elements = nr_elements
-        result = DerObject.decode(self, der_encoded, strict=strict)
+        result = DerObject.decode(self, der_encoded)
         return result
 
-    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
         self._seq = []
-        DerObject._decodeFromStream(self, s, strict)
+        DerObject._decodeFromStream(self, s)
         p = BytesIO_EOF(self.payload)
         while p.remaining_data() > 0:
             p.set_bookmark()
 
             der = DerObject()
-            der._decodeFromStream(p, strict)
+            der._decodeFromStream(p)
 
             # Parse INTEGERs differently
             if der._tag_octet != 0x02:
@@ -88,7 +88,7 @@ class DerSequence(DerObject):
             else:
                 derInt = DerObject()
                 data = p.data_since_bookmark()
-                derInt.decode(data, strict=strict)
+                derInt.decode(data)
                 self._seq.append(derInt.value)
 
 class UnwrappedKey(tuple[str, bytes, Optional[bytes]]):
