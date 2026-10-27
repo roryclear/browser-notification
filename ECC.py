@@ -11,6 +11,18 @@ from typing import (
 import random, secrets
 import operator
 from abc import ABC
+import re
+from binascii import a2b_base64
+
+def decode(pem_data: str, passphrase: Optional[bytes] = None) -> tuple[bytes, str, bool]:
+    r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
+    m = r.match(pem_data)
+    marker = m.group(1)
+    lines = pem_data.replace(" ", "").split()
+    data = a2b_base64("".join(lines[1:-1]))
+    enc_flag = False
+
+    return (data, marker, enc_flag)
 
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
     p = int(curve.p)
@@ -1068,7 +1080,6 @@ def import_key(
     threads: int = 1,
     max_memory: Optional[int] = None,
 ) -> EccKey:
-    import PEM
 
     if encoded.startswith(b"-----"):
         text_encoded = encoded.decode("latin-1")
@@ -1076,7 +1087,7 @@ def import_key(
         ecparams_end = "-----END EC PARAMETERS-----"
         text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
         
-        der_encoded, _, _ = PEM.decode(text_encoded, passphrase)
+        der_encoded, _, _ = decode(text_encoded, passphrase)
         result = _import_der(der_encoded, passphrase, max_iteration_count, threads, max_memory)
         return result
 
