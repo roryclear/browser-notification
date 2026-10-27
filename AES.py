@@ -14,24 +14,26 @@ NONCE_LENGTH = 12
 
 _GF_R = 0xE1000000000000000000000000000000
 
+SHA256_digest_size = 32
+SHA256_block_size = 64
+
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 class HMAC:
     def __init__(self, key, msg = b"") -> None:
-        self.digest_size = SHA256.digest_size
+        self.digest_size = SHA256_digest_size
         self._digestmod = SHA256
-    
-        if len(key) <= SHA256.block_size:
-            key_0 = key + b"\x00" * (SHA256.block_size - len(key))
+        if len(key) <= SHA256_digest_size:
+            key_0 = key + b"\x00" * (SHA256_block_size - len(key))
         else:
-            hash_k = SHA256.new(key).digest()
-            key_0 = hash_k + b"\x00" * (SHA256.block_size - len(hash_k))
+            hash_k = SHA256.SHA256Hash(key).digest()
+            key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
 
         key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
-        self._inner = SHA256.new(key_0_ipad)
+        self._inner = SHA256.SHA256Hash(key_0_ipad)
         self._inner.update(msg)
         key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
-        self._outer = SHA256.new(key_0_opad)
+        self._outer = SHA256.SHA256Hash(key_0_opad)
 
     def digest(self) -> bytes:
         frozen_outer_hash = self._outer.copy()
@@ -45,7 +47,7 @@ def _HKDF_expand(prk, info, L: int) -> bytes:
     while tlen < L:
         hmac = HMAC(prk, t[-1] + info + struct.pack("B", n))
         t.append(hmac.digest())
-        tlen += SHA256.digest_size
+        tlen += SHA256_digest_size
         n += 1
     okm = b"".join(t)
     return okm[:L]
