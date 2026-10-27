@@ -7,22 +7,7 @@ __all__ = ["wrap", "unwrap", "UnwrappedKey"]
 def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int: return int.from_bytes(s, "big")
 
 class DerObject:
-    def __init__(
-        self,
-        asn1Id: Optional[Union[int, bytes]] = None,
-        payload: bytes = b"",
-        constructed: bool = False,
-        value = 0
-    ) -> None:
-        self.value = value
-        self._tag_octet: Optional[int]
-        if asn1Id is None:
-            self._tag_octet = None
-            return
-
-        self.payload = payload
-        constructed_bit = 0x20 if constructed else 0x00
-        self._tag_octet = constructed_bit | asn1Id
+    def __init__(self) -> None: pass
 
     def _decodeLen(self, s: BytesIO_EOF) -> int:
         length = s.read_byte()
@@ -78,11 +63,7 @@ class DerSequence(DerObject):
             p.set_bookmark()
             der = DerObject()
             der._decodeFromStream(p)
-
-            if der._tag_octet != 0x02:
-                self._seq.append(p.data_since_bookmark())
-            else:
-                self._seq.append(0)
+            self._seq.append(p.data_since_bookmark())
                 
 def unwrap(p8_private_key: bytes):
     pk_info = DerSequence().decode(p8_private_key)
