@@ -1060,16 +1060,16 @@ def _import_rfc5915_der(
     return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
 
 
-def _import_pkcs8(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
+def _import_pkcs8(encoded):
     import PKCS8
-    unwrapped = PKCS8.unwrap(encoded, passphrase, max_iteration_count, threads=threads, max_memory=max_memory)
+    unwrapped = PKCS8.unwrap(encoded)
     _, private_key, params = unwrapped
     curve_oid = DerObjectId().decode(params).value
     key = _import_rfc5915_der(private_key, curve_oid)
     return key
 
 def _import_der(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
-    return _import_pkcs8(encoded, passphrase, max_iteration_count, threads, max_memory)
+    return _import_pkcs8(encoded)
 
 def import_key(
     encoded: Union[bytes, str],

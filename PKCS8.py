@@ -36,7 +36,7 @@ class DerObject:
             length = bytes_to_long(encoded_length)
         return length
 
-    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+    def decode(self, der_encoded: bytes, strict: bool = False):
         s = BytesIO_EOF(der_encoded)
         self._decodeFromStream(s, strict)
         return self
@@ -79,43 +79,17 @@ class BytesIO_EOF:
     def read_byte(self) -> int: return self.read(1)[0]
 
 class DerSequence(DerObject):
-    def __init__(
-        self,
-        startSeq=None,
-        implicit=None,
-        explicit=None,
-    ) -> None:
+    def __init__(self, implicit=None, explicit=None):
         DerObject.__init__(self, 0x10, b"", implicit, True, explicit)
-
-    def __getitem__(self, n: Union[int, slice]) -> Any:
-        return self._seq[n]
-
-    def __len__(self) -> int: return len(self._seq)
     
-    def decode(
-        self,
-        der_encoded: bytes,
-        strict: bool = False,
-        nr_elements: Optional[Union[int, Iterable[int]]] = None,
-        only_ints_expected: bool = False,
-    ) -> DerSequence:
+    def decode(self, der_encoded: bytes, strict: bool = False, nr_elements=None):
         self._nr_elements = nr_elements
         result = DerObject.decode(self, der_encoded, strict=strict)
-
-        if only_ints_expected and not self.hasOnlyInts():
-            raise ValueError("Some members are not INTEGERs")
-
         return result
 
     def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
-        """Decode a complete DER SEQUENCE from a file."""
-
         self._seq = []
-
-        # Fill up self.payload
         DerObject._decodeFromStream(self, s, strict)
-
-        # Add one item at a time to self.seq, by scanning self.payload
         p = BytesIO_EOF(self.payload)
         while p.remaining_data() > 0:
             p.set_bookmark()
@@ -132,47 +106,21 @@ class DerSequence(DerObject):
                 derInt.decode(data, strict=strict)
                 self._seq.append(derInt.value)
 
-        ok = True
-        if isinstance(self._nr_elements, int):
-            ok = len(self._seq) == self._nr_elements
-        elif self._nr_elements is not None:
-            ok = len(self._seq) in self._nr_elements
-
-        if not ok:
-            raise ValueError("Unexpected number of members (%d) in the sequence" % len(self._seq))
-
-#: Encryption scheme of a private key, when the ``protection`` is not specified
-DEFAULT_PROTECTION = "PBKDF2WithHMAC-SHA256AndAES256-CBC"
-
-
 class UnwrappedKey(tuple[str, bytes, Optional[bytes]]):
     public_key: Optional[bytes]
 
     @classmethod
-    def _create(
-        cls,
-        oid: str,
-        private_key: bytes,
-        params: Optional[bytes],
-        public_key: Optional[bytes],
-    ) -> UnwrappedKey:
+    def _create(cls, oid: str, private_key: bytes, params: Optional[bytes],public_key: Optional[bytes]) -> UnwrappedKey:
         result = cls((oid, private_key, params))
         result.public_key = public_key
         return result
 
-def unwrap(
-    p8_private_key: bytes,
-    passphrase: Optional[Union[bytes, str]] = None,
-    max_iteration_count: Optional[int] = None,
-    *,
-    threads: int = 1,
-    max_memory: Optional[int] = None,
-) -> UnwrappedKey:
+def unwrap(p8_private_key: bytes):
     pk_info = DerSequence().decode(p8_private_key, nr_elements=(2, 3, 4, 5))
-    algo = DerSequence().decode(pk_info[1], nr_elements=(1, 2))
-    algo_oid = DerObjectId().decode(algo[0]).value
-    algo_params = None if len(algo) == 1 else algo[1]
-    private_key = DerOctetString().decode(pk_info[2]).payload
+    algo = DerSequence().decode(pk_info._seq[1], nr_elements=(1, 2))
+    algo_oid = DerObjectId().decode(algo._seq[0]).value
+    algo_params = None if len(algo._seq) == 1 else algo._seq[1]
+    private_key = DerOctetString().decode(pk_info._seq[2]).payload
     public_key = None
 
 
