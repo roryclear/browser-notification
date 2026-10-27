@@ -15,17 +15,7 @@ class DerObject:
             encoded_length = s.read(length & 0x7F)
             length = bytes_to_long(encoded_length)
         return length
-
-    def decode(self, der_encoded: bytes):
-        s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s)
-        return self
-
-    def _decodeFromStream(self, s: BytesIO_EOF):
-        s.read_byte()
-        length = self._decodeLen(s)
-        self.payload = s.read(length)
-
+    
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
         self._buffer = initial_bytes
@@ -46,23 +36,29 @@ class BytesIO_EOF:
 
     def read_byte(self) -> int: return self.read(1)[0]
 
-def decode_seq(seq, der_encoded):
-    result = DerObject.decode(seq, der_encoded)
-    return result
-
 
 class DerSequence(DerObject):
-    def __init__(self):
-        DerObject.__init__(self)
+    def __init__(self): pass
+
+    def decode(self, der_encoded: bytes):
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s)
+        return self
 
     def _decodeFromStream(self, s: BytesIO_EOF) -> None:
         self._seq = []
-        DerObject._decodeFromStream(self, s)
+
+        s.read_byte()
+        length = self._decodeLen(s)
+        self.payload = s.read(length)
+
         p = BytesIO_EOF(self.payload)
         while p.remaining_data() > 0:
             p.set_bookmark()
             der = DerObject()
-            der._decodeFromStream(p)
+            p.read_byte()
+            length = der._decodeLen(p)
+            der.payload = p.read(length)
             self._seq.append(p.data_since_bookmark())
                 
 def unwrap(p8_private_key: bytes):
