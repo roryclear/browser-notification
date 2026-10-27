@@ -714,19 +714,15 @@ class BytesIO_EOF:
         return self.read(1)[0]
 
 class DerObject:
-    def _decodeLen(self, s: BytesIO_EOF) -> int:
-        length = s.read_byte()
-        return length
-
-    def decode(self, der_encoded: bytes, strict: bool = False):
+    def decode(self, der_encoded: bytes):
         s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s, strict)
+        self._decodeFromStream(s)
         return self
 
-    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
+    def _decodeFromStream(self, s: BytesIO_EOF):
         idOctet = s.read_byte()
         self._tag_octet = idOctet
-        length = self._decodeLen(s)
+        length = s.read_byte()
         self.payload = s.read(length)
 
 
@@ -740,10 +736,10 @@ class DerObjectId(DerObject):
         DerObject.__init__(self, 0x06, b"", implicit, False, explicit)
         self.value = value
 
-    def decode(self, der_encoded: bytes, strict: bool = False) -> DerObjectId: return DerObject.decode(self, der_encoded, strict)
+    def decode(self, der_encoded: bytes) -> DerObjectId: return DerObject.decode(self, der_encoded)
 
-    def _decodeFromStream(self, s, strict):
-        DerObject._decodeFromStream(self, s, strict)
+    def _decodeFromStream(self, s):
+        DerObject._decodeFromStream(self, s)
 
         # Derive self.value from self.payload
         p = BytesIO_EOF(self.payload)
@@ -819,33 +815,19 @@ class DerObject:
     def _convertTag(self, tag: Union[int, bytes]) -> int:
         return tag
 
-    def _decodeLen(self, s: BytesIO_EOF) -> int:
-        length = s.read_byte()
-        return length
-
-    def decode(self: _DerObjectT, der_encoded: bytes, strict: bool = False) -> _DerObjectT:
+    def decode(self: _DerObjectT, der_encoded: bytes):
         s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s, strict)
+        self._decodeFromStream(s)
         return self
 
-    def _decodeFromStream(self, s: BytesIO_EOF, strict: bool) -> None:
-        """Decode a complete DER element from a file."""
-
-        idOctet = s.read_byte()
-        if self._tag_octet is not None:
-            if idOctet != self._tag_octet:
-                raise ValueError("Unexpected DER tag")
-        else:
-            self._tag_octet = idOctet
-        length = self._decodeLen(s)
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
+        self._tag_octet = s.read_byte()
+        length = s.read_byte()
         self.payload = s.read(length)
         if hasattr(self, "_inner_tag_octet"):
             p = BytesIO_EOF(self.payload)
-            inner_octet = p.read_byte()
-            if inner_octet != self._inner_tag_octet:
-                raise ValueError("Unexpected internal DER tag")
-            length = self._decodeLen(p)
-            self.payload = p.read(length)
+            p.read_byte()
+            self.payload = p.read(p.read_byte())
 
 class DerBitString(DerObject):
     def __init__(
@@ -857,11 +839,9 @@ class DerBitString(DerObject):
         DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
         self.value = value
 
-    def _decodeFromStream(self, s, strict):
-        DerObject._decodeFromStream(self, s, strict)
-        # Fill-up self.value
+    def _decodeFromStream(self, s):
+        DerObject._decodeFromStream(self, s)
         self.value = b""
-        # Remove padding count byte
         if self.payload:
             self.value = self.payload[1:]
 
@@ -888,19 +868,18 @@ class DerSequence(DerObject):
     def decode(
         self,
         der_encoded: bytes,
-        strict: bool = False,
         nr_elements: Optional[Union[int, Any[int]]] = None,
         only_ints_expected: bool = False,
     ) -> DerSequence:
         self._nr_elements = nr_elements
-        result = DerObject.decode(self, der_encoded, strict=strict)
+        result = DerObject.decode(self, der_encoded)
         return result
 
-    def _decodeFromStream(self, s: Any, strict: bool) -> None:
+    def _decodeFromStream(self, s: Any) -> None:
         self._seq = []
 
         # Fill up self.payload
-        DerObject._decodeFromStream(self, s, strict)
+        DerObject._decodeFromStream(self, s)
 
         # Add one item at a time to self.seq, by scanning self.payload
         p = BytesIO_EOF(self.payload)
@@ -908,13 +887,10 @@ class DerSequence(DerObject):
             p.set_bookmark()
 
             der = DerObject()
-            der._decodeFromStream(p, strict)
-
-            # Parse INTEGERs differently
+            der._decodeFromStream(p)
             if der._tag_octet != 0x02:
                 self._seq.append(p.data_since_bookmark())
             else:
-                data = p.data_since_bookmark()
                 self._seq.append(1)
 
 
