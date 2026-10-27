@@ -53,16 +53,7 @@ def curve448_curve():
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
     order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
 
-    lib = """typedef void Curve448Context;
-int curve448_new_context(Curve448Context **pec_ctx);
-"""
-
-    _curve448_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", lib)
-
-    class EcLib: new_context = _curve448_lib.curve448_new_context
-
     curve448_context = VoidPointer()
-    EcLib.new_context(curve448_context.address_of())
 
     curve448 = _Curve(
         p=IntegerNat(p),
@@ -75,7 +66,7 @@ int curve448_new_context(Curve448Context **pec_ctx);
         context=SmartPointer(curve448_context.get()),
         canonical="Curve448",
         openssh=None,
-        rawlib=EcLib,
+        rawlib=None,
     )
 
     return curve448
@@ -156,8 +147,6 @@ int ec_nat_clone(EcPoint **out, const EcPoint *p);
 """
 
 _ec_lib = load_pycryptodome_raw_lib("Crypto.PublicKey._ec_nat", _ec_cdecl)
-
-class EcLib: pass
 
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
