@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _copy_point, _py_scalar_mul
+from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _copy_point, _affine_double, _affine_add
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,30 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def _py_scalar_mul(point: dict, k: int, curve) -> dict:
+    """Simple double-and-add (functionally equivalent, not constant-time)."""
+    p = int(curve.p)
+    if curve.order is not None:
+        k = k % int(curve.order)
+    if k == 0 or point["z"] % p == 0:
+        return {"x": 0, "y": 1, "z": 0}
+
+    Zinv = pow(point["z"], -1, p)
+    ax = (point["x"] * Zinv) % p
+    ay = (point["y"] * Zinv) % p
+
+    result = None
+    addend = (ax, ay)
+    for bit in bin(k)[2:]:
+        if result is not None:
+            result = _affine_double(result, p)
+        if bit == "1":
+            result = _affine_add(result, addend, p)
+
+    if result is None:
+        return {"x": 0, "y": 1, "z": 0}
+    return {"x": result[0], "y": result[1], "z": 1}
 
 class EccPoint:
     def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
