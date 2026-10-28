@@ -5,6 +5,14 @@ from cryptography.hazmat.bindings._rust import PrivateFormat as PrivateFormat
 from cryptography.hazmat.bindings._rust import Encoding as Encoding
 from cryptography.hazmat.primitives._serialization import NoEncryption
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurve
+
+class SECP256R1(EllipticCurve):
+    name = "secp256r1"
+    key_size = 256
+    group_order = (
+        0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+    )
 
 class Vapid(object):
     _private_key = None
@@ -67,7 +75,7 @@ class Vapid(object):
 
 
 def generate_keys():
-    return ec.generate_private_key(ec.SECP256R1(), None)
+    return ec.generate_private_key(SECP256R1(), None)
 
 vapid = Vapid()
 vapid.private_key = generate_keys()
