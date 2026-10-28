@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, IntegerNat
+from ECC import bytes_to_long, decode, _Curves, IntegerNat
 
 
 KEY_LENGTH = 16
@@ -18,6 +18,53 @@ _GF_R = 0xE1000000000000000000000000000000
 SHA256_digest_size = 32
 SHA256_block_size = 64
 
+class EccKey:
+    def __init__(
+        self,
+        *,
+        curve: Optional[str] = None,
+        d: Optional[Union[int, Any]] = None,
+        seed: Optional[bytes] = None,
+        point: Optional[Union[Any, Any]] = None,
+    ) -> None:
+        # Which of these attributes are set depends on the type of key
+        self._d: Any = cast(Any, d)
+        self._seed: Any = cast(Any, seed)
+        self._point: Any = cast(Any, point)
+        self._curve = _Curves()[curve]
+
+    # ECDSA
+    def _sign(self, z, k):
+        assert 0 < k < self._curve.order
+
+        order = self._curve.order
+        blind = IntegerNat.random_range(min_inclusive=1, max_exclusive=order)
+
+        blind_d = self._d * blind
+        inv_blind_k = (blind * k).inverse(order)
+
+        r = (self._curve.G * k)._x % order
+        s = inv_blind_k * (blind * z + blind_d * r) % order
+        return (r, s)
+
+    @property
+    def pointQ(self) -> Any:
+        if self._point is None:
+            self._point = self._curve.G * self._d
+        return self._point
+
+    def public_key(self):
+        return EccKey(curve=self._curve.canonical, point=self.pointQ)
+
+    def _export_SEC1(self):
+        modulus_bytes = self.pointQ.size_in_bytes()
+        x, y = self.pointQ._xy
+        public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
+        return public_key
+
+def _encode_coordinate(value, length) -> bytes:
+    encoded = long_to_bytes(int(value), length)
+    return encoded
 
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
     p = int(curve.p)
