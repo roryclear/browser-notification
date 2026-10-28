@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _copy_point, _affine_double, _affine_add
+from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _py_clone_point
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,40 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def _copy_point(point):
+    copy = point.__class__.__new__(point.__class__)
+    copy._curve = point._curve
+    copy.curve = point.curve
+    copy._point = _py_clone_point(point._point)
+    return copy
+
+def _affine_double(P, p: int, a: int = -3):
+    if P is None:
+        return None
+    x, y = P
+    if y % p == 0:
+        return None
+    lam = ((3 * x * x + a) * pow(2 * y, -1, p)) % p
+    x3 = (lam * lam - 2 * x) % p
+    y3 = (lam * (x - x3) - y) % p
+    return (x3, y3)
+
+def _affine_add(P, Q, p: int, a: int = -3):
+    if P is None:
+        return Q
+    if Q is None:
+        return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2:
+        if (y1 + y2) % p == 0:
+            return None
+        return _affine_double(P, p, a)
+    lam = ((y2 - y1) * pow(x2 - x1, -1, p)) % p
+    x3 = (lam * lam - x1 - x2) % p
+    y3 = (lam * (x1 - x3) - y1) % p
+    return (x3, y3)
 
 def _py_scalar_mul(point: dict, k: int, curve) -> dict:
     """Simple double-and-add (functionally equivalent, not constant-time)."""
