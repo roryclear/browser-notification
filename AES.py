@@ -1,5 +1,4 @@
 from typing import Any, Union, Optional
-import cffi
 import os
 import struct
 import ECC
@@ -186,14 +185,6 @@ class Vapid:
                 self._schema, token, b64urlencode(public_key)
             )
         }
-
-def create_string_buffer(init_or_size: Union[bytes, int], size: Optional[int] = None) -> Any:
-    result = cffi.FFI().new("uint8_t[]", init_or_size)
-    return result
-
-def create_output_buffer(size: int) -> Any: return create_string_buffer(size)
-
-def get_raw_buffer(buf: Any) -> bytes: return cffi.FFI().buffer(buf)[:]
 
 from ECC import bytes_to_long
 
@@ -397,11 +388,6 @@ def _create_ctr_cipher(key, initial_value, nonce):
     initial_counter_block = nonce + initial_value
     return CtrMode(cipher_state, initial_counter_block,
                     len(nonce), counter_len, False)
-
-class VoidPointer:
-    def __init__(self): self._pp = cffi.FFI().new("void *[1]")
-    def get(self): return self._pp[0]
-    def address_of(self): return self._pp
 
 SBOX = [
     0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
