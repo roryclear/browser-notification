@@ -1345,6 +1345,17 @@ class BlockState:
             out += rijndael_encrypt(self.ek, self.rounds, data[i:i+16])
         return bytes(out)
 
+def long_to_bytes(n: int, blocksize: int = 0) -> bytes:
+    n = operator.index(n)
+    length = max((n.bit_length() + 7) // 8, 1)
+    if blocksize > 0: length = ceil_div(length, blocksize) * blocksize
+    return n.to_bytes(length, "big")
+
+def ceil_div(n: int, d: int) -> int:
+    r, q = divmod(n, d)
+    if (n != 0) and (q != 0): r += 1
+    return r
+
 class EcbMode:
     def __init__(self, key: bytes) -> None:
         self.block_size = 16
@@ -1358,9 +1369,6 @@ class EcbMode:
             output[:] = result
             return None
         return result
-
-from ECC import long_to_bytes
-
 
 class CtrMode:
     def __init__(
