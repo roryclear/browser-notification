@@ -1,6 +1,6 @@
 
 import base64
-import serialization
+from cryptography.hazmat.primitives._serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
 from cryptography.hazmat.primitives.asymmetric import ec
 
 class Vapid01(object):
@@ -50,9 +50,9 @@ class Vapid01(object):
     def save_key(self, key_file):
         with open(key_file, "wb") as file:
             key = self._private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
+            encoding=Encoding.PEM,
+            format=PrivateFormat.PKCS8,
+            encryption_algorithm=NoEncryption(),
             )
             file.write(key)
             file.close()
@@ -72,8 +72,8 @@ vapid.private_key = generate_keys()
 vapid.save_key("vapid_private.pem")
 
 public_bytes = vapid._public_key.public_bytes(
-    serialization.Encoding.X962,
-    serialization.PublicFormat.UncompressedPoint
+    Encoding.X962,
+    PublicFormat.UncompressedPoint
 )
 
 public_key = base64.urlsafe_b64encode(public_bytes).rstrip(b"=").decode()
