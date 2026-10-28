@@ -868,35 +868,3 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
     y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
     return construct(curve=_curve_name, point_x=x, point_y=y)
 
-def _import_rfc5915_der(
-    encoded: bytes, curve_oid: Optional[str] = None
-) -> EccKey:
-    ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
-    scalar_bytes = DerObject().decode(ec_private_key[1]).payload
-    next_element = 2
-
-    for curve_name, curve in _Curves().items():
-        if curve.oid == curve_oid:
-            break
-
-    # Try to decode 'publicKey'
-    point_x = point_y = None
-    if next_element < len(ec_private_key):
-        public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
-        public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
-        point_x = public_key.pointQ.x
-        point_y = public_key.pointQ.y
-        next_element += 1
-
-    d = int.from_bytes(scalar_bytes, byteorder="big")
-    return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
-
-
-def _import_pkcs8(encoded):
-    import PKCS8
-    unwrapped = PKCS8.unwrap(encoded)
-    private_key, params = unwrapped
-    curve_oid = DerObjectId().decode(params).value
-    key = _import_rfc5915_der(private_key, curve_oid)
-    return key
-

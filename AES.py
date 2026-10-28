@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _import_pkcs8, _import_public_der
+from ECC import bytes_to_long, decode, _import_public_der, DerObjectId, EccKey, DerSequence, DerObject, DerBitString, construct, _Curves
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,37 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def _import_rfc5915_der(
+    encoded: bytes, curve_oid: Optional[str] = None
+) -> EccKey:
+    ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
+    scalar_bytes = DerObject().decode(ec_private_key[1]).payload
+    next_element = 2
+
+    for curve_name, curve in _Curves().items():
+        if curve.oid == curve_oid:
+            break
+
+    # Try to decode 'publicKey'
+    point_x = point_y = None
+    if next_element < len(ec_private_key):
+        public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
+        public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
+        point_x = public_key.pointQ.x
+        point_y = public_key.pointQ.y
+        next_element += 1
+
+    d = int.from_bytes(scalar_bytes, byteorder="big")
+    return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
+
+def _import_pkcs8(encoded):
+    import PKCS8
+    unwrapped = PKCS8.unwrap(encoded)
+    private_key, params = unwrapped
+    curve_oid = DerObjectId().decode(params).value
+    key = _import_rfc5915_der(private_key, curve_oid)
+    return key
 
 def import_key(encoded, curve_name=None):
     if encoded.startswith(b"-----"):
