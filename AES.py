@@ -1,16 +1,14 @@
 from typing import Any, Union, Optional, cast
 import os
 import struct
-import ECC
 import base64, json
 import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import _Curves
 from abc import ABC
 from binascii import a2b_base64
-import operator
+import operator, random
 
 
 KEY_LENGTH = 16
@@ -20,6 +18,215 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def generate(*, curve):
+    curve_name = curve
+    curve_info = _Curves()[curve_name]
+    d = random.randrange(1, curve_info.order)
+    new_key = EccKey(curve=curve_name, d=d)
+
+    return new_key
+
+class _Curve:
+    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None):
+        self.p = p
+        self.order = order
+        self.Gx = Gx
+        self.Gy = Gy
+        self.modulus_bits = modulus_bits
+        self.oid = oid
+        self.canonical = canonical
+
+def curve25519_curve():
+    p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
+    order = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
+
+
+    curve25519 = _Curve(
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(9),
+        Gy=None,
+        modulus_bits=255,
+        oid="1.3.101.110",  # RFC8410
+        canonical="Curve25519"
+    )
+    return curve25519
+
+
+def curve448_curve():
+    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
+    order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
+
+    curve448 = _Curve(
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(5),
+        Gy=None,
+        modulus_bits=448,
+        oid="1.3.101.111",  # RFC8410
+        canonical="Curve448",
+    )
+
+    return curve448
+
+def ed25519_curve():
+    p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
+    order = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
+    Gx = 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A
+    Gy = 0x6666666666666666666666666666666666666666666666666666666666666658
+
+    ed25519 = _Curve(
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
+        modulus_bits=255,
+        oid="1.3.101.112",  # RFC8410
+        canonical="Ed25519",
+    )
+    return ed25519
+
+
+def ed448_curve():
+    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
+    order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
+    Gx = 0x4F1970C66BED0DED221D15A622BF36DA9E146570470F1767EA6DE324A3D3A46412AE1AF72AB66511433B80E18B00938E2626A82BC70CC05E
+    Gy = 0x693F46716EB6BC248876203756C9C7624BEA73736CA3984087789C1E05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14
+
+
+    ed448 = _Curve(
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
+        modulus_bits=448,
+        oid="1.3.101.113",  # RFC8410
+        canonical="Ed448",
+    )
+    return ed448
+
+def _new_curve(p, b, order, Gx, Gy, bits, oid, desc):
+    return _Curve(
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
+        modulus_bits=bits,
+        oid=oid,
+        canonical=desc,
+    )
+
+
+def p192_curve():
+    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFF
+    b = 0x64210519E59C80E70FA7E9AB72243049FEB8DEECC146B9B1
+    order = 0xFFFFFFFFFFFFFFFFFFFFFFFF99DEF836146BC9B1B4D22831
+    Gx = 0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012
+    Gy = 0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811
+
+    return _new_curve(p, b, order, Gx, Gy, 192, "1.2.840.10045.3.1.1", "NIST P-192")
+
+
+def p224_curve():
+    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000001
+    b = 0xB4050A850C04B3ABF54132565044B0B7D7BFD8BA270B39432355FFB4
+    order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF16A2E0B8F03E13DD29455C5C2A3D
+    Gx = 0xB70E0CBD6BB4BF7F321390B94A03C1D356C21122343280D6115C1D21
+    Gy = 0xBD376388B5F723FB4C22DFE6CD4375A05A07476444D5819985007E34
+
+    return _new_curve(p, b, order, Gx, Gy, 224, "1.3.132.0.33", "NIST P-224")
+
+
+def p256_curve():
+    p = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
+    b = 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
+    order = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+    Gx = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
+    Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
+
+    return _new_curve(p, b, order, Gx, Gy, 256, "1.2.840.10045.3.1.7", "NIST P-256")
+
+
+def p384_curve():
+    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFF0000000000000000FFFFFFFF
+    b = 0xB3312FA7E23EE7E4988E056BE3F82D19181D9C6EFE8141120314088F5013875AC656398D8A2ED19D2A85C8EDD3EC2AEF
+    order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC7634D81F4372DDF581A0DB248B0A77AECEC196ACCC52973
+    Gx = 0xAA87CA22BE8B05378EB1C71EF320AD746E1D3B628BA79B9859F741E082542A385502F25DBF55296C3A545E3872760AB7
+    Gy = 0x3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F
+
+    return _new_curve(p, b, order, Gx, Gy, 384, "1.3.132.0.34", "NIST P-384")
+
+
+def p521_curve():
+    p = 0x000001FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    b = 0x00000051953EB9618E1C9A1F929A21A0B68540EEA2DA725B99B315F3B8B489918EF109E156193951EC7E937B1652C0BD3BB1BF073573DF883D2C34F1EF451FD46B503F00
+    order = 0x000001FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5C9B8899C47AEBB6FB71E91386409
+    Gx = 0x000000C6858E06B70404E9CD9E3ECB662395B4429C648139053FB521F828AF606B4D3DBAA14B5E77EFE75928FE1DC127A2FFA8DE3348B3C1856A429BF97E7E31C2E5BD66
+    Gy = 0x0000011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650
+
+    return _new_curve(p, b, order, Gx, Gy, 521, "1.3.132.0.35", "NIST P-521")
+
+class CurveID:
+    P192 = 1
+    P224 = 2
+    P256 = 3
+    P384 = 4
+    P521 = 5
+    ED25519 = 6
+    ED448 = 7
+    CURVE25519 = 8
+    CURVE448 = 9
+
+class _Curves:
+    curves: dict[str, Any] = {}
+    p192_names = ["p192", "NIST P-192", "P-192", "prime192v1", "secp192r1", "nistp192"]
+    p224_names = ["p224", "NIST P-224", "P-224", "prime224v1", "secp224r1", "nistp224"]
+    p256_names = ["p256", "NIST P-256", "P-256", "prime256v1", "secp256r1", "nistp256"]
+    p384_names = ["p384", "NIST P-384", "P-384", "prime384v1", "secp384r1", "nistp384"]
+    p521_names = ["p521", "NIST P-521", "P-521", "prime521v1", "secp521r1", "nistp521"]
+    ed25519_names = ["ed25519", "Ed25519"]
+    ed448_names = ["ed448", "Ed448"]
+    curve25519_names = ["curve25519", "Curve25519", "X25519"]
+    curve448_names = ["curve448", "Curve448", "X448"]
+
+    # For each curve: its names, its ID, and the module and function that create it
+    definitions = (
+        (p192_names, CurveID.P192, "_nist_ecc", "p192_curve"),
+        (p224_names, CurveID.P224, "_nist_ecc", "p224_curve"),
+        (p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),
+        (p384_names, CurveID.P384, "_nist_ecc", "p384_curve"),
+        (p521_names, CurveID.P521, "_nist_ecc", "p521_curve"),
+        (ed25519_names, CurveID.ED25519, "_edwards", "ed25519_curve"),
+        (ed448_names, CurveID.ED448, "_edwards", "ed448_curve"),
+        (curve25519_names, CurveID.CURVE25519, "_montgomery", "curve25519_curve"),
+        (curve448_names, CurveID.CURVE448, "_montgomery", "curve448_curve"),
+    )
+
+    all_names = [name for definition in definitions for name in definition[0]]
+
+    def load(self, name):
+        definition = next((d for d in self.definitions if name in d[0]), None)
+        names, curve_id, _, function = definition
+        curve_func = globals().get(function)
+
+        curve = curve_func()
+        curve.id = curve_id
+        self.curves.update(dict.fromkeys(names, curve))
+        return curve
+
+    def __getitem__(self, name):
+        curve = self.curves.get(name)
+        if curve is None:
+            curve = self.load(name)
+            if not (name in self.curve25519_names or name in self.curve448_names):
+                curve.G = EccPoint(curve.Gx, curve.Gy, name)
+        return curve
+
+    def items(self):
+        for name in self.all_names:
+            _ = self[name]
+        return self.curves.items()
 
 class IntegerBase(ABC):
     _public: bool = False
@@ -849,7 +1056,7 @@ def aes_encrypt(content, headers=None):
     headers = vv.sign(vapid_claims)
 
     rs = 4096
-    private_key = ECC.generate(curve="P-256")
+    private_key = generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
         nonce = iv(nonce, counter)
         cipher = GcmMode(key, nonce)
