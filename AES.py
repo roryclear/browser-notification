@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _import_public_der, DerObjectId, EccKey, DerSequence, DerObject, DerBitString, construct, _Curves
+from ECC import bytes_to_long, decode, _import_public_der, DerObjectId, EccKey, DerObject, construct, _Curves, cast, BytesIO_EOF
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,65 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+class DerSequence(DerObject):
+    def __init__(
+        self,
+        startSeq = None,
+        implicit: Optional[int] = None,
+        explicit: Optional[int] = None,
+    ) -> None:
+        DerObject.__init__(self, 0x10, b"", implicit, True, explicit)
+        self._seq: list[Any]
+        if startSeq is None:
+            self._seq = []
+        else:
+            self._seq = cast(list[Any], startSeq)
+
+
+    def __getitem__(self, n: Union[int, slice]) -> Any: return self._seq[n]
+
+    def __len__(self) -> int: return len(self._seq)
+
+    def decode(self, der_encoded: bytes, nr_elements):
+        self._nr_elements = nr_elements
+        result = DerObject.decode(self, der_encoded)
+        return result
+
+    def _decodeFromStream(self, s: Any) -> None:
+        self._seq = []
+
+        # Fill up self.payload
+        DerObject._decodeFromStream(self, s)
+
+        # Add one item at a time to self.seq, by scanning self.payload
+        p = BytesIO_EOF(self.payload)
+        while p.remaining_data() > 0:
+            p.set_bookmark()
+
+            der = DerObject()
+            der._decodeFromStream(p)
+            if der._tag_octet != 0x02:
+                self._seq.append(p.data_since_bookmark())
+            else:
+                self._seq.append(1)
+
+class DerBitString(DerObject):
+    def __init__(
+        self,
+        value: Union[bytes, DerObject] = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
+        self.value = value
+
+    def _decodeFromStream(self, s):
+        DerObject._decodeFromStream(self, s)
+        self.value = b""
+        if self.payload:
+            self.value = self.payload[1:]
+
 
 def _import_rfc5915_der(
     encoded: bytes, curve_oid: Optional[str] = None

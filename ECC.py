@@ -673,11 +673,6 @@ class DerObjectId:
         return tag
 
 class DerObject:
-    """Base class for defining a single DER object.
-
-    This class should never be directly instantiated.
-    """
-
     def __init__(
         self,
         asn1Id: Optional[Union[int, bytes]] = None,
@@ -717,23 +712,6 @@ class DerObject:
             p = BytesIO_EOF(self.payload)
             p.read_byte()
             self.payload = p.read(p.read_byte())
-
-class DerBitString(DerObject):
-    def __init__(
-        self,
-        value: Union[bytes, DerObject] = b"",
-        implicit: Optional[Union[int, bytes]] = None,
-        explicit: Optional[Union[int, bytes]] = None,
-    ) -> None:
-        DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
-        self.value = value
-
-    def _decodeFromStream(self, s):
-        DerObject._decodeFromStream(self, s)
-        self.value = b""
-        if self.payload:
-            self.value = self.payload[1:]
-
 
 class DerSequence(DerObject):
     def __init__(
