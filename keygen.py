@@ -1,6 +1,6 @@
 
 import base64
-from cryptography.hazmat.primitives import serialization
+import serialization
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives.asymmetric import ec
 
