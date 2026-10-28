@@ -4,8 +4,8 @@ from cryptography.hazmat.bindings._rust import PublicFormat as PublicFormat
 from cryptography.hazmat.bindings._rust import PrivateFormat as PrivateFormat
 from cryptography.hazmat.bindings._rust import Encoding as Encoding
 from cryptography.hazmat.primitives._serialization import NoEncryption
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurve
+from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 
 class SECP256R1(EllipticCurve):
     name = "secp256r1"
@@ -75,7 +75,7 @@ class Vapid(object):
 
 
 def generate_keys():
-    return ec.generate_private_key(SECP256R1(), None)
+    return rust_openssl.ec.generate_private_key(SECP256R1(), None)
 
 vapid = Vapid()
 vapid.private_key = generate_keys()
