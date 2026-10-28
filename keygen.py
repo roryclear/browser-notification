@@ -1,8 +1,8 @@
 
 import base64
-from cryptography.hazmat.bindings._rust import PublicFormat as PublicFormat
-from cryptography.hazmat.bindings._rust import PrivateFormat as PrivateFormat
-from cryptography.hazmat.bindings._rust import Encoding as Encoding
+from cryptography.hazmat.bindings._rust import PublicFormat
+from cryptography.hazmat.bindings._rust import PrivateFormat
+from cryptography.hazmat.bindings._rust import Encoding
 from cryptography.hazmat.primitives._serialization import NoEncryption
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurve
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
