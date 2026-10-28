@@ -14,7 +14,7 @@ from abc import ABC
 import re
 from binascii import a2b_base64
 
-def decode(pem_data: str, passphrase: Optional[bytes] = None) -> tuple[bytes, str, bool]:
+def decode(pem_data: str) -> tuple[bytes, str, bool]:
     r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
     m = r.match(pem_data)
     marker = m.group(1)
@@ -926,7 +926,7 @@ def generate(*, curve) -> EccKey:
 
     return new_key
 
-def construct(**kwargs: Unpack[ConstructParams]) -> EccKey:
+def construct(**kwargs) -> EccKey:
     params = cast(dict[str, Any], kwargs)
 
     curve_name = params["curve"]
@@ -984,27 +984,15 @@ def _import_pkcs8(encoded):
     key = _import_rfc5915_der(private_key, curve_oid)
     return key
 
-def _import_der(encoded, passphrase, max_iteration_count=None, threads=1, max_memory=None):
-    return _import_pkcs8(encoded)
-
-def import_key(
-    encoded: Union[bytes, str],
-    passphrase: Optional[Union[str, bytes]] = None,
-    curve_name: Optional[str] = None,
-    *,
-    max_iteration_count: Optional[int] = None,
-    threads: int = 1,
-    max_memory: Optional[int] = None,
-) -> EccKey:
-
+def import_key(encoded, curve_name=None):
     if encoded.startswith(b"-----"):
         text_encoded = encoded.decode("latin-1")
         ecparams_start = "-----BEGIN EC PARAMETERS-----"
         ecparams_end = "-----END EC PARAMETERS-----"
         text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
         
-        der_encoded, _, _ = decode(text_encoded, passphrase)
-        result = _import_der(der_encoded, passphrase, max_iteration_count, threads, max_memory)
+        der_encoded, _, _ = decode(text_encoded)
+        result = _import_pkcs8(der_encoded)
         return result
 
     # SEC1
