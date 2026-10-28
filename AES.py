@@ -230,30 +230,19 @@ def random_integerNat(max_bits):
     ret = IntegerNat.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
     return ret
 
-class IntegerBase(ABC):
-    _public: bool = False
 
+def random_range(min_inclusive=None, max_inclusive=None, max_exclusive=None,):
+    max_inclusive = max_exclusive - 1
+    norm_maximum = IntegerNat(max_inclusive) - min_inclusive
+    bits_needed = norm_maximum.size_in_bits()
 
-    @classmethod
-    def random_range(
-        cls,
-        *,
-        min_inclusive=None,
-        max_inclusive=None,
-        max_exclusive=None,
-    ):
-        max_inclusive = max_exclusive - 1
+    while True:
+        norm_candidate = random_integerNat(max_bits=bits_needed)
+        if norm_candidate <= norm_maximum:
+            return norm_candidate + min_inclusive
 
-        norm_maximum = cls(max_inclusive) - min_inclusive
-        bits_needed = norm_maximum.size_in_bits()
-
-        while True:
-            norm_candidate = random_integerNat(max_bits=bits_needed)
-            if norm_candidate <= norm_maximum:
-                return norm_candidate + min_inclusive
-
-class IntegerNat(IntegerBase):
-    def __init__(self, value: Union[IntegerBase, int], _min_bits: int = 0) -> None:
+class IntegerNat:
+    def __init__(self, value, _min_bits: int = 0) -> None:
         self._public = False
         self.value = int(value)
         self._bits = max(1, self.value.bit_length(), _min_bits)
@@ -377,7 +366,7 @@ class EccKey:
         assert 0 < k < self._curve.order
 
         order = self._curve.order
-        blind = IntegerNat.random_range(min_inclusive=1, max_exclusive=order)
+        blind = random_range(min_inclusive=1, max_exclusive=order)
 
         blind_d = self._d * blind
         inv_blind_k = (blind * k).inverse(order)
