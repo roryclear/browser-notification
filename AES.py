@@ -6,8 +6,8 @@ import base64, json
 import copy, time
 import secrets
 from urllib.parse import urlparse
-import hashlib
-from ECC import bytes_to_long
+import hashlib, re
+from ECC import bytes_to_long, decode, _import_pkcs8, _import_public_der
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,21 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def import_key(encoded, curve_name=None):
+    if encoded.startswith(b"-----"):
+        text_encoded = encoded.decode("latin-1")
+        ecparams_start = "-----BEGIN EC PARAMETERS-----"
+        ecparams_end = "-----END EC PARAMETERS-----"
+        text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
+        
+        der_encoded, _, _ = decode(text_encoded)
+        result = _import_pkcs8(der_encoded)
+        return result
+
+    # SEC1
+    if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04):
+        return _import_public_der(encoded, curve_name=curve_name)
 
 class SHA256Hash:
     def __init__(self, data=None):
@@ -156,12 +171,12 @@ class Vapid:
 
     @classmethod
     def from_pem(cls, private_key):
-        return cls(ECC.import_key(private_key))
+        return cls(import_key(private_key))
 
     @classmethod
     def from_der(cls, private_key):
         der = b64urldecode(private_key)
-        return cls(ECC.import_key(der))
+        return cls(import_key(der))
 
     @classmethod
     def from_file(cls, private_key_file=None):
@@ -185,7 +200,7 @@ class Vapid:
         }
 
 def derive_key(salt, private_key, dh, auth_secret):
-    receiver_pub = ECC.import_key(dh, curve_name="P-256")
+    receiver_pub = import_key(dh, curve_name="P-256")
     shared_point = receiver_pub.pointQ * private_key._d
     secret = int(shared_point.x).to_bytes(32, "big")
     sender_pub = private_key.public_key()._export_SEC1()

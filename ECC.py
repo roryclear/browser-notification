@@ -900,18 +900,3 @@ def _import_pkcs8(encoded):
     key = _import_rfc5915_der(private_key, curve_oid)
     return key
 
-def import_key(encoded, curve_name=None):
-    if encoded.startswith(b"-----"):
-        text_encoded = encoded.decode("latin-1")
-        ecparams_start = "-----BEGIN EC PARAMETERS-----"
-        ecparams_end = "-----END EC PARAMETERS-----"
-        text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
-        
-        der_encoded, _, _ = decode(text_encoded)
-        result = _import_pkcs8(der_encoded)
-        return result
-
-    # SEC1
-    if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04):
-        return _import_public_der(encoded, curve_name=curve_name)
-
