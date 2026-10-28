@@ -221,22 +221,18 @@ class _Curves:
             _ = self[name]
         return self.curves.items()
 
+def random_integerNat(max_bits):
+    bits = max_bits
+    bytes_needed = ((bits - 1) // 8) + 1
+    significant_bits_msb = 8 - (bytes_needed * 8 - bits)
+    msb = secrets.token_bytes(1)[0]
+    msb &= (1 << significant_bits_msb) - 1
+    ret = IntegerNat.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
+    return ret
+
 class IntegerBase(ABC):
     _public: bool = False
 
-    @classmethod
-    def random(
-        cls,
-        *,
-        max_bits: Optional[int] = None,
-    ):
-        bits = max_bits
-        bytes_needed = ((bits - 1) // 8) + 1
-        significant_bits_msb = 8 - (bytes_needed * 8 - bits)
-        msb = secrets.token_bytes(1)[0]
-        msb &= (1 << significant_bits_msb) - 1
-        ret = IntegerNat.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
-        return ret
 
     @classmethod
     def random_range(
@@ -252,7 +248,7 @@ class IntegerBase(ABC):
         bits_needed = norm_maximum.size_in_bits()
 
         while True:
-            norm_candidate = IntegerNat.random(max_bits=bits_needed)
+            norm_candidate = random_integerNat(max_bits=bits_needed)
             if norm_candidate <= norm_maximum:
                 return norm_candidate + min_inclusive
 
