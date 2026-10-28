@@ -661,30 +661,3 @@ def generate(*, curve) -> EccKey:
     new_key = EccKey(curve=curve_name, d=d)
 
     return new_key
-
-def construct(**kwargs) -> EccKey:
-    params = cast(dict[str, Any], kwargs)
-
-    curve_name = params["curve"]
-    point_x = params.pop("point_x", None)
-    point_y = params.pop("point_y", None)
-
-    if None not in (point_x, point_y):
-        params["point"] = EccPoint(point_x, point_y, curve_name)
-    new_key = EccKey(**params)
-
-    return new_key
-
-
-def _import_public_der(ec_point, curve_oid=None, curve_name=None):
-    for _curve_name, curve in _Curves().items():
-        if curve_oid and curve.oid == curve_oid:
-            break
-        if curve_name == _curve_name:
-            break
-        
-    modulus_bytes = int(curve.p.size_in_bits() / 8)
-    x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
-    y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
-    return construct(curve=_curve_name, point_x=x, point_y=y)
-

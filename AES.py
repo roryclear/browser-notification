@@ -1,4 +1,4 @@
-from typing import Any, Union, Optional
+from typing import Any, Union, Optional, cast
 import os
 import struct
 import ECC
@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _import_public_der, EccKey, construct, _Curves, cast
+from ECC import bytes_to_long, decode, EccKey, _Curves, EccPoint
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,31 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def construct(**kwargs) -> EccKey:
+    params = cast(dict[str, Any], kwargs)
+
+    curve_name = params["curve"]
+    point_x = params.pop("point_x", None)
+    point_y = params.pop("point_y", None)
+
+    if None not in (point_x, point_y):
+        params["point"] = EccPoint(point_x, point_y, curve_name)
+    new_key = EccKey(**params)
+
+    return new_key
+
+def _import_public_der(ec_point, curve_oid=None, curve_name=None):
+    for _curve_name, curve in _Curves().items():
+        if curve_oid and curve.oid == curve_oid:
+            break
+        if curve_name == _curve_name:
+            break
+        
+    modulus_bytes = int(curve.p.size_in_bits() / 8)
+    x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
+    y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
+    return construct(curve=_curve_name, point_x=x, point_y=y)
 
 class BytesIO_EOF:
     def __init__(self, initial_bytes: bytes) -> None:
