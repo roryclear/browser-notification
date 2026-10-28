@@ -6,7 +6,7 @@ from cryptography.hazmat.bindings._rust import Encoding as Encoding
 from cryptography.hazmat.primitives._serialization import NoEncryption
 from cryptography.hazmat.primitives.asymmetric import ec
 
-class Vapid01(object):
+class Vapid(object):
     _private_key = None
     _public_key = None
     _schema = "WebPush"
@@ -65,7 +65,6 @@ class Vapid01(object):
             file.write(self.public_pem())
             file.close()
 
-Vapid = Vapid01
 
 def generate_keys():
     return ec.generate_private_key(ec.SECP256R1(), None)
