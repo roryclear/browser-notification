@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _import_public_der, DerObjectId, EccKey, DerObject, construct, _Curves, cast, BytesIO_EOF
+from ECC import bytes_to_long, decode, _import_public_der, EccKey, construct, _Curves, cast, BytesIO_EOF
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,90 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+class DerObjectId:
+    def __init__(self): pass
+
+    def decode(self, der_encoded: bytes): return DerObject.decode(self, der_encoded)
+
+    def _decodeFromStream(self, s):
+        DerObject._decodeFromStream(self, s)
+
+        # Derive self.value from self.payload
+        p = BytesIO_EOF(self.payload)
+
+        subcomps = []
+        v = 0
+        while p.remaining_data():
+            c = p.read_byte()
+            v = (v << 7) + (c & 0x7F)
+            if not (c & 0x80):
+                subcomps.append(v)
+                v = 0
+
+        if len(subcomps) == 0:
+            raise ValueError("Empty payload")
+
+        if subcomps[0] < 40:
+            subcomps[:1] = [0, subcomps[0]]
+        elif subcomps[0] < 80:
+            subcomps[:1] = [1, subcomps[0] - 40]
+        else:
+            subcomps[:1] = [2, subcomps[0] - 80]
+
+        self.value = ".".join([str(x) for x in subcomps])
+
+    def _convertTag(self, tag: Union[int, bytes]) -> int:
+        """Check if *tag* is a real DER tag (5 bits).
+        Convert it from a character to number if necessary.
+        """
+        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1:
+            tag = tag[0]
+        # Ensure that tag is a low tag
+        if not (isinstance(tag, int) and 0 <= tag < 0x1F):
+            raise ValueError("Wrong DER tag")
+        return tag
+
+class DerObject:
+    def __init__(
+        self,
+        asn1Id: Optional[Union[int, bytes]] = None,
+        payload: bytes = b"",
+        implicit: Optional[Union[int, bytes]] = None,
+        constructed: bool = False,
+        explicit: Optional[Union[int, bytes]] = None,
+    ) -> None:
+        self._tag_octet: Optional[int]
+        if asn1Id is None:
+            # The tag octet will be read in with ``decode``
+            self._tag_octet = None
+            return
+
+        self.payload = payload
+        constructed_bit = 0x20 if constructed else 0x00
+
+
+        if explicit is not None:
+            # 'constructed bit' is always asserted for an EXPLICIT tag
+            self._tag_octet = 0x80 | 0x20 | explicit
+            self._inner_tag_octet = constructed_bit | asn1Id
+        else:
+            # Neither IMPLICIT nor EXPLICIT
+            self._tag_octet = constructed_bit | asn1Id
+
+    def decode(self, der_encoded: bytes):
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s)
+        return self
+
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
+        self._tag_octet = s.read_byte()
+        length = s.read_byte()
+        self.payload = s.read(length)
+        if hasattr(self, "_inner_tag_octet"):
+            p = BytesIO_EOF(self.payload)
+            p.read_byte()
+            self.payload = p.read(p.read_byte())
 
 class DerSequence(DerObject):
     def __init__(
