@@ -2,7 +2,8 @@
 import base64
 from cryptography.hazmat.bindings._rust import PublicFormat as PublicFormat
 from cryptography.hazmat.bindings._rust import PrivateFormat as PrivateFormat
-from cryptography.hazmat.primitives._serialization import Encoding, NoEncryption
+from cryptography.hazmat.bindings._rust import Encoding as Encoding
+from cryptography.hazmat.primitives._serialization import NoEncryption
 from cryptography.hazmat.primitives.asymmetric import ec
 
 class Vapid01(object):
