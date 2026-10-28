@@ -99,14 +99,13 @@ def _py_scalar_mul(point: dict, k: int, curve: "_Curve") -> dict:
     return {"x": result[0], "y": result[1], "z": 1}
 
 class _Curve:
-    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, context=None, canonical=None, openssh=None, rawlib=None):
+    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None, openssh=None, rawlib=None):
         self.p = p
         self.order = order
         self.Gx = Gx
         self.Gy = Gy
         self.modulus_bits = modulus_bits
         self.oid = oid
-        self.context = context
         self.canonical = canonical
         self.rawlib = rawlib
 
@@ -122,7 +121,6 @@ def curve25519_curve():
         Gy=None,
         modulus_bits=255,
         oid="1.3.101.110",  # RFC8410
-        context=None,
         canonical="Curve25519",
         openssh=None,
         rawlib=None,
@@ -134,8 +132,6 @@ def curve448_curve():
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
     order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
 
-    curve448_context = VoidPointer()
-
     curve448 = _Curve(
         p=IntegerNat(p),
         order=IntegerNat(order),
@@ -143,7 +139,6 @@ def curve448_curve():
         Gy=None,
         modulus_bits=448,
         oid="1.3.101.111",  # RFC8410
-        context=SmartPointer(curve448_context.get()),
         canonical="Curve448",
         openssh=None,
         rawlib=None,
@@ -164,7 +159,6 @@ def ed25519_curve():
         Gy=IntegerNat(Gy, public=True),
         modulus_bits=255,
         oid="1.3.101.112",  # RFC8410
-        context=None,
         canonical="Ed25519",
         openssh="ssh-ed25519",
         rawlib=None,
@@ -179,9 +173,6 @@ def ed448_curve():
     Gy = 0x693F46716EB6BC248876203756C9C7624BEA73736CA3984087789C1E05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14
 
 
-    ed448_context = VoidPointer()
-    context = SmartPointer(ed448_context.get())
-
     ed448 = _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
@@ -189,7 +180,6 @@ def ed448_curve():
         Gy=IntegerNat(Gy, public=True),
         modulus_bits=448,
         oid="1.3.101.113",  # RFC8410
-        context=context,
         canonical="Ed448",
         openssh=None,
         rawlib=None,
@@ -197,8 +187,6 @@ def ed448_curve():
     return ed448
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
-    curve = VoidPointer()
-    context = SmartPointer(curve.get())
     return _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
@@ -206,7 +194,6 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
         Gy=IntegerNat(Gy, public=True),
         modulus_bits=bits,
         oid=oid,
-        context=context,
         canonical=desc,
         openssh=openssh,
         rawlib=None,
@@ -581,7 +568,6 @@ def _copy_point(point):
 class VoidPointer:
     def __init__(self): pass
     def get(self): pass
-    def address_of(self): return self._pp
 
 
 class SmartPointer:
