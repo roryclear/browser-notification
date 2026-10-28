@@ -603,32 +603,6 @@ class EccPoint:
         np *= scalar
         return np
 
-
-class BytesIO_EOF:
-    def __init__(self, initial_bytes: bytes) -> None:
-        self._buffer = initial_bytes
-        self._index = 0
-        self._bookmark: Optional[int] = None
-
-    def set_bookmark(self) -> None:
-        self._bookmark = self._index
-
-    def data_since_bookmark(self) -> bytes:
-        assert self._bookmark is not None
-        return self._buffer[self._bookmark : self._index]
-
-    def remaining_data(self) -> int:
-        return len(self._buffer) - self._index
-
-    def read(self, length: int) -> bytes:
-        new_index = self._index + length
-        result = self._buffer[self._index : new_index]
-        self._index = new_index
-        return result
-
-    def read_byte(self) -> int:
-        return self.read(1)[0]
-
 class ConstructParams(TypedDict, total=False):
     curve: str
     d: Union[int, Any]

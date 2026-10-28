@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _import_public_der, EccKey, construct, _Curves, cast, BytesIO_EOF
+from ECC import bytes_to_long, decode, _import_public_der, EccKey, construct, _Curves, cast
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,31 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+class BytesIO_EOF:
+    def __init__(self, initial_bytes: bytes) -> None:
+        self._buffer = initial_bytes
+        self._index = 0
+        self._bookmark: Optional[int] = None
+
+    def set_bookmark(self) -> None:
+        self._bookmark = self._index
+
+    def data_since_bookmark(self) -> bytes:
+        assert self._bookmark is not None
+        return self._buffer[self._bookmark : self._index]
+
+    def remaining_data(self) -> int:
+        return len(self._buffer) - self._index
+
+    def read(self, length: int) -> bytes:
+        new_index = self._index + length
+        result = self._buffer[self._index : new_index]
+        self._index = new_index
+        return result
+
+    def read_byte(self) -> int:
+        return self.read(1)[0]
 
 class DerObjectId:
     def __init__(self): pass
