@@ -99,7 +99,7 @@ def _py_scalar_mul(point: dict, k: int, curve: "_Curve") -> dict:
     return {"x": result[0], "y": result[1], "z": 1}
 
 class _Curve:
-    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None, openssh=None, rawlib=None):
+    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None, rawlib=None):
         self.p = p
         self.order = order
         self.Gx = Gx
@@ -122,7 +122,6 @@ def curve25519_curve():
         modulus_bits=255,
         oid="1.3.101.110",  # RFC8410
         canonical="Curve25519",
-        openssh=None,
         rawlib=None,
     )
     return curve25519
@@ -140,7 +139,6 @@ def curve448_curve():
         modulus_bits=448,
         oid="1.3.101.111",  # RFC8410
         canonical="Curve448",
-        openssh=None,
         rawlib=None,
     )
 
@@ -160,7 +158,6 @@ def ed25519_curve():
         modulus_bits=255,
         oid="1.3.101.112",  # RFC8410
         canonical="Ed25519",
-        openssh="ssh-ed25519",
         rawlib=None,
     )
     return ed25519
@@ -181,7 +178,6 @@ def ed448_curve():
         modulus_bits=448,
         oid="1.3.101.113",  # RFC8410
         canonical="Ed448",
-        openssh=None,
         rawlib=None,
     )
     return ed448
@@ -195,7 +191,6 @@ def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
         modulus_bits=bits,
         oid=oid,
         canonical=desc,
-        openssh=openssh,
         rawlib=None,
     )
 
