@@ -151,10 +151,10 @@ def ed25519_curve():
     Gy = 0x6666666666666666666666666666666666666666666666666666666666666658
 
     ed25519 = _Curve(
-        p=IntegerNat(p, public=True),
-        order=IntegerNat(order, public=True),
-        Gx=IntegerNat(Gx, public=True),
-        Gy=IntegerNat(Gy, public=True),
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
         modulus_bits=255,
         oid="1.3.101.112",  # RFC8410
         canonical="Ed25519",
@@ -171,10 +171,10 @@ def ed448_curve():
 
 
     ed448 = _Curve(
-        p=IntegerNat(p, public=True),
-        order=IntegerNat(order, public=True),
-        Gx=IntegerNat(Gx, public=True),
-        Gy=IntegerNat(Gy, public=True),
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
         modulus_bits=448,
         oid="1.3.101.113",  # RFC8410
         canonical="Ed448",
@@ -184,10 +184,10 @@ def ed448_curve():
 
 def _new_curve(p, b, order, Gx, Gy, bits, oid, desc):
     return _Curve(
-        p=IntegerNat(p, public=True),
-        order=IntegerNat(order, public=True),
-        Gx=IntegerNat(Gx, public=True),
-        Gy=IntegerNat(Gy, public=True),
+        p=IntegerNat(p),
+        order=IntegerNat(order),
+        Gx=IntegerNat(Gx),
+        Gy=IntegerNat(Gy),
         modulus_bits=bits,
         oid=oid,
         canonical=desc,
@@ -336,16 +336,11 @@ def long_to_bytes(n: int, blocksize: int = 0) -> bytes:
 class IntegerBase(ABC):
     _public: bool = False
 
-    def _is_public_with(self, term: Any) -> bool:
-        return False
-
     @classmethod
     def random(
         cls,
         *,
-        exact_bits: Optional[int] = None,
         max_bits: Optional[int] = None,
-        randfunc=None,
     ) -> IntegerBase:
         bits = max_bits
         bytes_needed = ((bits - 1) // 8) + 1
@@ -362,7 +357,6 @@ class IntegerBase(ABC):
         min_inclusive: Optional[Union[IntegerBase, int]] = None,
         max_inclusive: Optional[Union[IntegerBase, int]] = None,
         max_exclusive: Optional[Union[IntegerBase, int]] = None,
-        randfunc: Optional[RandFunc] = None,
     ) -> IntegerBase:
         max_inclusive = max_exclusive - 1
 
@@ -380,18 +374,10 @@ class IntegerNat(IntegerBase):
     def __init__(
         self,
         value: Union[IntegerBase, int],
-        _min_bits: int = 0,
-        *,
-        public: bool = False,
+        _min_bits: int = 0
     ) -> None:
-        self._public = public or (
-            isinstance(value, IntegerBase) and value._public
-        )
+        self._public = False
         self.value = int(value)
-
-        if self.value < 0:
-            raise ValueError("Natural numbers cannot be negative")
-
         self._bits = max(1, self.value.bit_length(), _min_bits)
 
     def _alloc(self, bits: int) -> None:
@@ -457,7 +443,7 @@ class IntegerNat(IntegerBase):
         public: bool = False,
     ) -> "IntegerNat":
         value = int.from_bytes(byte_string, byteorder)
-        return cls(value, _min_bits, public=public)
+        return cls(value, _min_bits)
 
     # Comparisons
 
@@ -487,11 +473,7 @@ class IntegerNat(IntegerBase):
 
     def __add__(self, term: Any) -> "IntegerNat":
         other = self._conv(term)
-        return IntegerNat(
-            self.value + other.value,
-            max(self._bits, other._bits) + 1,
-            public=self._public and other._public,
-        )
+        return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
 
     __radd__ = __add__
 
@@ -500,29 +482,17 @@ class IntegerNat(IntegerBase):
         value = self.value - other.value
         if value < 0:
             raise ValueError("Natural number subtraction underflow")
-        return IntegerNat(
-            value,
-            max(self._bits, other._bits),
-            public=self._public and other._public,
-        )
+        return IntegerNat(value, max(self._bits, other._bits))
 
     def __mul__(self, factor: Any) -> "IntegerNat":
         other = self._conv(factor)
-        return IntegerNat(
-            self.value * other.value,
-            self._bits + other._bits,
-            public=self._public and other._public,
-        )
+        return IntegerNat(self.value * other.value, self._bits + other._bits)
 
     __rmul__ = __mul__
 
     def __mod__(self, divisor: Any) -> "IntegerNat":
         divisor = self._check_modulus(divisor)
-        return IntegerNat(
-            self.value % divisor.value,
-            divisor._bits,
-            public=self._public and divisor._public,
-        )
+        return IntegerNat(self.value % divisor.value, divisor._bits)
 
     @staticmethod
     def _check_modulus(
@@ -545,7 +515,7 @@ class IntegerNat(IntegerBase):
         return self
 
     def inverse(self, modulus: Any) -> "IntegerNat":
-        result = IntegerNat(self, self._bits, public=self._public)
+        result = IntegerNat(self, self._bits)
         return result.inplace_inverse(modulus)
 
 def ceil_div(n: int, d: int) -> int:
