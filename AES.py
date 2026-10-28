@@ -7,6 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib
+from ECC import bytes_to_long
 
 
 KEY_LENGTH = 16
@@ -24,8 +25,6 @@ class SHA256Hash:
 
     def update(self, data): self._hash.update(data)
 
-    def digest(self) -> bytes: return self._hash.digest()
-
     def copy(self):
         clone = SHA256Hash()
         clone._hash = self._hash.copy()
@@ -39,7 +38,7 @@ class HMAC:
         if len(key) <= SHA256_digest_size:
             key_0 = key + b"\x00" * (SHA256_block_size - len(key))
         else:
-            hash_k = SHA256Hash(key).digest()
+            hash_k = SHA256Hash(key)._hash.digest()()
             key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
 
         key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
@@ -50,8 +49,8 @@ class HMAC:
 
     def digest(self) -> bytes:
         frozen_outer_hash = self._outer.copy()
-        frozen_outer_hash.update(self._inner.digest())
-        return frozen_outer_hash.digest()
+        frozen_outer_hash.update(self._inner._hash.digest())
+        return frozen_outer_hash._hash.digest()
 
 def _HKDF_expand(prk, info, L: int) -> bytes:
     t = [b""]
@@ -126,8 +125,7 @@ class _GHASH:
         return self
 
     @property
-    def digest(self) -> bytes:
-        return long_to_bytes(self._last_y, 16)
+    def digest(self) -> bytes: return long_to_bytes(self._last_y, 16)
 
 def b64urlencode(data): return base64.urlsafe_b64encode(data).replace(b"=", b"").decode("utf8")
 
@@ -186,42 +184,15 @@ class Vapid:
             )
         }
 
-from ECC import bytes_to_long
-
-from collections import namedtuple
-
 def derive_key(salt, private_key, dh, auth_secret):
     receiver_pub = ECC.import_key(dh, curve_name="P-256")
-
-    # ECDH: X coordinate of the shared point, encoded to 32 bytes.
     shared_point = receiver_pub.pointQ * private_key._d
     secret = int(shared_point.x).to_bytes(32, "big")
-
     sender_pub = private_key.public_key()._export_SEC1()
-
     context = b"WebPush: info\x00" + dh + sender_pub
-
-    secret = HKDF(
-        secret,
-        32,
-        auth_secret,
-        context=context,
-    )
-
-    key = HKDF(
-        secret,
-        KEY_LENGTH,
-        salt,
-        context=b"Content-Encoding: aes128gcm\x00",
-    )
-
-    nonce = HKDF(
-        secret,
-        NONCE_LENGTH,
-        salt,
-        context=b"Content-Encoding: nonce\x00",
-    )
-
+    secret = HKDF(secret, 32, auth_secret, context=context)
+    key = HKDF(secret, KEY_LENGTH, salt, context=b"Content-Encoding: aes128gcm\x00")
+    nonce = HKDF(secret, NONCE_LENGTH, salt, context=b"Content-Encoding: nonce\x00")
     return key, nonce
 
 def iv(base, counter):
@@ -236,20 +207,14 @@ def aes_encrypt(content, headers=None):
 
     with open("notif_keys.json") as f: subscription_info = json.load(f)
 
-    receiver_key = b64urldecode(
-        subscription_info["keys"]["p256dh"].encode("ascii")
-    )
-    auth_key = b64urldecode(
-        subscription_info["keys"]["auth"].encode("ascii")
-    )
+    receiver_key = b64urldecode(subscription_info["keys"]["p256dh"].encode("ascii"))
+
+    auth_key = b64urldecode(subscription_info["keys"]["auth"].encode("ascii"))
 
     endpoint = subscription_info["endpoint"]
     url = urlparse(endpoint)
 
-    vapid_claims = {
-        "sub": "mailto:fake@fake.invalid",
-        "aud": f"{url.scheme}://{url.netloc}",
-    }
+    vapid_claims = {"sub": "mailto:fake@fake.invalid", "aud": f"{url.scheme}://{url.netloc}"}
 
     vv = Vapid.from_file("vapid_private.pem")
     headers = vv.sign(vapid_claims)
@@ -330,8 +295,7 @@ class GcmMode:
             self._cache += bytes(data[:filler])
             data = data[filler:]
 
-            if len(self._cache) < 16:
-                return
+            if len(self._cache) < 16: return
 
             self._signer.update(self._cache)
             self._cache = b""
@@ -340,12 +304,10 @@ class GcmMode:
         self._cache = bytes(data[update_len:])
         if update_len > 0:
             if update_len < len(data):
-                # Do not copy the data
                 data = memoryview(data)[:update_len]
             self._signer.update(data)
 
 def _compute_mac(cipher: "GcmMode") -> bytes:
-    # Pad to a full block and append the length block (NIST SP 800-38D §7.1)
     cipher._update(b"\x00" * (16 - len(cipher._cache)))
     cipher._update(long_to_bytes(8 * cipher._auth_len, 8))
     cipher._update(long_to_bytes(8 * cipher._msg_len, 8))
@@ -357,33 +319,10 @@ def encrypt(cipher, plaintext):
     ciphertext = cipher._cipher.encrypt(plaintext)
     cipher._update(ciphertext)
     cipher._msg_len += len(plaintext)
-    return ciphertext   
-
-_ghash_api = """
-    int ghash_portable(uint8_t y_out[16],
-                    const uint8_t block_data[],
-                    size_t len,
-                    const uint8_t y_in[16],
-                    const void *exp_key);
-    int ghash_expand_portable(const uint8_t h[16],
-                           void **ghash_tables);
-    int ghash_destroy_portable(void *ghash_tables);
-    int ghash_at_portable(uint8_t y_out[16],
-                       const uint8_t block_data[],
-                       size_t offset,
-                       size_t len,
-                       const uint8_t y_in[16],
-                       const void *exp_key);
-    int ghash_combine_portable(uint8_t y_out[16],
-                            const uint8_t y_in[16],
-                            size_t n_blocks,
-                            const uint8_t g[16],
-                            const void *exp_key);
-"""
+    return ciphertext
 
 def _create_ctr_cipher(key, initial_value, nonce):
     cipher_state = BlockState(key)
-    # factory block size 16
     counter_len = 16 - len(nonce)
     initial_counter_block = nonce + initial_value
     return CtrMode(cipher_state, initial_counter_block,
@@ -422,10 +361,6 @@ def _gmul(a, b):
 
 _M2  = [_gmul(x, 2)  for x in range(256)]
 _M3  = [_gmul(x, 3)  for x in range(256)]
-_M9  = [_gmul(x, 9)  for x in range(256)]
-_M11 = [_gmul(x, 11) for x in range(256)]
-_M13 = [_gmul(x, 13) for x in range(256)]
-_M14 = [_gmul(x, 14) for x in range(256)]
 
 Te0 = [( _M2[s]<<24)|(s<<16)|(s<<8)| _M3[s] for s in SBOX]
 Te1 = [( _M3[s]<<24)|(_M2[s]<<16)|(s<<8)| s     for s in SBOX]
@@ -561,7 +496,6 @@ def rijndael_encrypt(rk, nr, pt):
 
 
 class BlockState:
-    """Pure-Python equivalent of the C `block_state` struct."""
     def __init__(self, key):
         self.rounds = {16: 10, 24: 12, 32: 14}[len(key)]
         self.ek, _ = key_setup_enc(key, len(key) * 8)
@@ -582,13 +516,10 @@ class EcbMode:
 
     def encrypt(self, plaintext, output=None):
         data = bytes(plaintext)
-        if len(data) % 16:
-            raise ValueError("ECB plaintext length must be a multiple of 16")
-
         result = self._state.encrypt(data)
 
         if output is not None:
-            output[:] = result           # honour caller's buffer
+            output[:] = result
             return None
         return result
 
@@ -598,14 +529,12 @@ from ECC import long_to_bytes
 class CtrMode:
     def __init__(
         self,
-        block_cipher,                 # BlockState (from the AES answer)
+        block_cipher,
         initial_counter_block,
         prefix_len: int,
         counter_len: int,
         little_endian: bool,
-    ) -> None:
-        if prefix_len + counter_len > len(initial_counter_block):
-            raise ValueError("prefix_len + counter_len exceeds block length")
+    ):
 
         self._cipher      = block_cipher
         self.block_size   = len(initial_counter_block)
@@ -614,8 +543,8 @@ class CtrMode:
         self._counter_len = counter_len
         self._little_endian = little_endian
 
-        self._keystream   = None   # bytes: current block's keystream (when _used > 0)
-        self._used        = 0      # bytes consumed from current block
+        self._keystream   = None
+        self._used        = 0
 
         self._bytes_processed = 0
         self._max_bytes = (1 << (8 * counter_len)) * self.block_size
@@ -637,7 +566,6 @@ class CtrMode:
                     return
 
     def _consume(self, n: int) -> bytes:
-        """Advance state by n bytes; return the keystream slice."""
         out = bytearray()
         rem = n
         while rem:
