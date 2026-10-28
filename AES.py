@@ -7,7 +7,8 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, _Curves, IntegerNat
+from ECC import _Curves, IntegerNat
+from binascii import a2b_base64
 
 
 KEY_LENGTH = 16
@@ -17,6 +18,19 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+def decode(pem_data: str) -> tuple[bytes, str, bool]:
+    r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
+    m = r.match(pem_data)
+    marker = m.group(1)
+    lines = pem_data.replace(" ", "").split()
+    data = a2b_base64("".join(lines[1:-1]))
+    enc_flag = False
+
+    return (data, marker, enc_flag)
+
+def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int:
+    return int.from_bytes(s, "big")
 
 class EccKey:
     def __init__(
