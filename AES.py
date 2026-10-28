@@ -831,9 +831,45 @@ def _import_rfc5915_der(
     d = int.from_bytes(scalar_bytes, byteorder="big")
     return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
 
+class DerSequence2: # todo merge!
+    def __init__(self): pass
+
+    def decode(self, der_encoded: bytes):
+        s = BytesIO_EOF(der_encoded)
+        self._decodeFromStream(s)
+        return self
+
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
+        self._seq = []
+
+        s.read_byte()
+        length = s.read_byte()
+        if length > 127:
+            encoded_length = s.read(length & 0x7F)
+            length = bytes_to_long(encoded_length)
+
+        self.payload = s.read(length)
+
+        p = BytesIO_EOF(self.payload)
+        while p.remaining_data() > 0:
+            p.set_bookmark()
+            p.read_byte()
+            length = p.read_byte()
+            if length > 127:
+                encoded_length = p.read(length & 0x7F)
+                length = bytes_to_long(encoded_length)
+
+            self.payload = p.read(length)
+            self._seq.append(p.data_since_bookmark())
+                
+def unwrap(p8_private_key: bytes):
+    pk_info = DerSequence2().decode(p8_private_key)
+    algo = DerSequence2().decode(pk_info._seq[1])
+    private_key = DerObject().decode(pk_info._seq[2]).payload
+    return (private_key, algo._seq[1])
+
 def _import_pkcs8(encoded):
-    import PKCS8
-    unwrapped = PKCS8.unwrap(encoded)
+    unwrapped = unwrap(encoded)
     private_key, params = unwrapped
     curve_oid = DerObjectId().decode(params).value
     key = _import_rfc5915_der(private_key, curve_oid)
