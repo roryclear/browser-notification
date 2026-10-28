@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _py_clone_point
+from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, IntegerNat
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,26 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+
+def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
+    p = int(curve.p)
+    x = int.from_bytes(xb, "big") % p
+    y = int.from_bytes(yb, "big") % p
+    if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
+    return {"x": x, "y": y, "z": 1}
+
+def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
+    p = int(curve.p)
+    X, Y, Z = point["x"], point["y"], point["z"]
+    if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
+    Zinv = pow(Z, -1, p)
+    x = (X * Zinv) % p
+    y = (Y * Zinv) % p
+    return (bytearray(x.to_bytes(modulus_bytes, "big")),
+            bytearray(y.to_bytes(modulus_bytes, "big")))
+
+def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
 
 def _copy_point(point):
     copy = point.__class__.__new__(point.__class__)

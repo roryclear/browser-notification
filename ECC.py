@@ -31,20 +31,6 @@ def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
     if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
     return {"x": x, "y": y, "z": 1}
 
-
-def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
-
-def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
-    p = int(curve.p)
-    X, Y, Z = point["x"], point["y"], point["z"]
-    if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
-    Zinv = pow(Z, -1, p)
-    x = (X * Zinv) % p
-    y = (Y * Zinv) % p
-    return (bytearray(x.to_bytes(modulus_bytes, "big")),
-            bytearray(y.to_bytes(modulus_bytes, "big")))
-
-
 def _affine_double(P, p: int, a: int = -3):
     if P is None:
         return None
@@ -515,6 +501,8 @@ def ceil_div(n: int, d: int) -> int:
     if (n != 0) and (q != 0): r += 1
     return r
 
+def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
+
 def _copy_point(point):
     copy = point.__class__.__new__(point.__class__)
     copy._curve = point._curve
@@ -536,6 +524,16 @@ class SmartPointer:
 
 RNG = Callable[[int], bytes]
 Int = Union[int, Any]
+
+def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
+    p = int(curve.p)
+    X, Y, Z = point["x"], point["y"], point["z"]
+    if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
+    Zinv = pow(Z, -1, p)
+    x = (X * Zinv) % p
+    y = (Y * Zinv) % p
+    return (bytearray(x.to_bytes(modulus_bytes, "big")),
+            bytearray(y.to_bytes(modulus_bytes, "big")))
 
 class EccPoint:
     def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
