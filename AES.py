@@ -267,13 +267,13 @@ class IntegerNat(IntegerBase):
         self.value = 0
 
     @classmethod
-    def _make(cls, bits: int) -> "IntegerNat":
+    def _make(cls, bits: int):
         obj = cls.__new__(cls)
         obj._alloc(bits)
         obj._public = False
         return obj
 
-    def _adopt(self, other: "IntegerNat") -> "IntegerNat":
+    def _adopt(self, other: "IntegerNat"):
         self.value = other.value
         self._bits = other._bits
         self._public = other._public
@@ -296,52 +296,37 @@ class IntegerNat(IntegerBase):
     def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview], byteorder: str = "big"):
         return IntegerNat(int.from_bytes(byte_string, byteorder), 0)
 
-    # Comparisons
-
     def _cmp(self, term: Any) -> int:
         other = int(term)
         return (self.value > other) - (self.value < other)
-
-    def __eq__(self, term: Any) -> bool:
-        try:
-            return self.value == int(term)
-        except (TypeError, ValueError):
-            return NotImplemented
-
-    def __lt__(self, term: Any) -> bool:
-        return self._cmp(term) < 0
 
     def __le__(self, term: Any) -> bool:
         return self._cmp(term) <= 0
 
     def __gt__(self, term: Any) -> bool:
         return self._cmp(term) > 0
-
-    def __ge__(self, term: Any) -> bool:
-        return self._cmp(term) >= 0
-
     # Arithmetic
 
-    def __add__(self, term: Any) -> "IntegerNat":
+    def __add__(self, term: Any):
         other = self._conv(term)
         return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
 
     __radd__ = __add__
 
-    def __sub__(self, term: Any) -> "IntegerNat":
+    def __sub__(self, term: Any):
         other = self._conv(term)
         value = self.value - other.value
         if value < 0:
             raise ValueError("Natural number subtraction underflow")
         return IntegerNat(value, max(self._bits, other._bits))
 
-    def __mul__(self, factor: Any) -> "IntegerNat":
+    def __mul__(self, factor: Any):
         other = self._conv(factor)
         return IntegerNat(self.value * other.value, self._bits + other._bits)
 
     __rmul__ = __mul__
 
-    def __mod__(self, divisor: Any) -> "IntegerNat":
+    def __mod__(self, divisor: Any):
         divisor = self._check_modulus(divisor)
         return IntegerNat(self.value % divisor.value, divisor._bits)
 
@@ -350,7 +335,7 @@ class IntegerNat(IntegerBase):
         modulus: Any,
         name: str = "Modulus",
         zero_error: type[Exception] = ZeroDivisionError,
-    ) -> "IntegerNat":
+    ):
         modulus = IntegerNat._conv(modulus)
         if modulus.value == 0:
             raise zero_error("%s cannot be zero" % name)
@@ -359,13 +344,13 @@ class IntegerNat(IntegerBase):
     def size_in_bits(self) -> int:
         return max(1, self.value.bit_length())
 
-    def inplace_inverse(self, modulus: Any) -> "IntegerNat":
+    def inplace_inverse(self, modulus: Any):
         modulus = self._check_modulus(modulus)
         self.value = pow(self.value, -1, modulus.value)
         self._bits = modulus._bits
         return self
 
-    def inverse(self, modulus: Any) -> "IntegerNat":
+    def inverse(self, modulus: Any):
         result = IntegerNat(self, self._bits)
         return result.inplace_inverse(modulus)
 
