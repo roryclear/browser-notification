@@ -7,7 +7,7 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import bytes_to_long, decode, EccKey, _Curves, EccPoint
+from ECC import bytes_to_long, decode, EccKey, _Curves, _encode_coordinate, _py_new_point, _py_get_xy_bytes, IntegerNat, _copy_point, _py_scalar_mul
 
 
 KEY_LENGTH = 16
@@ -17,6 +17,72 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+class EccPoint:
+    def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
+        self._curve = _Curves()[curve]
+        self.curve = "NIST P-256"
+
+        modulus_bytes = self.size_in_bytes()
+
+        xb = _encode_coordinate(x, modulus_bytes)
+        yb = _encode_coordinate(y, modulus_bytes)
+        # todo why
+        p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
+        xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
+        yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
+        self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
+
+    def copy(self):return _copy_point(self)
+
+    @property
+    def x(self) -> int:
+        return self.xy[0]
+
+    @property
+    def y(self) -> int:
+        return self.xy[1]
+
+    @property
+    def xy(self) -> tuple[int, int]:
+        xb, yb = self._get_xy_bytes()
+        return (bytes_to_long(xb), bytes_to_long(yb))
+
+    @property
+    def _x(self):
+        return self._xy[0]
+
+    @property
+    def _y(self):
+        return self._xy[1]
+
+    @property
+    def _xy(self):
+        xb, yb = self._get_xy_bytes()
+        return (IntegerNat.from_bytes(xb), IntegerNat.from_bytes(yb))
+
+    def _get_xy_bytes(self) -> tuple:
+        return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
+
+    def size_in_bytes(self) -> int:
+        """Size of each coordinate, in bytes."""
+        return (self.size_in_bits() + 7) // 8
+
+    def size_in_bits(self) -> int:
+        """Size of each coordinate, in bits."""
+        return self._curve.modulus_bits
+
+
+    def __imul__(self, scalar: int):
+        self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
+        return self
+
+    def __mul__(self, scalar: int):
+        """Return a new point, the scalar product of this one"""
+
+        np = self.copy()
+        np *= scalar
+        return np
 
 def construct(**kwargs) -> EccKey:
     params = cast(dict[str, Any], kwargs)
