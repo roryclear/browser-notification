@@ -1,12 +1,12 @@
 
 import base64
-from py_vapid import Vapid, default_backend
+from py_vapid import Vapid
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
 def generate_keys():
-    return ec.generate_private_key(ec.SECP256R1(), default_backend())
+    return ec.generate_private_key(ec.SECP256R1(), None)
 
 vapid = Vapid()
 vapid.private_key = generate_keys()
