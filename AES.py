@@ -257,11 +257,7 @@ class IntegerBase(ABC):
                 return norm_candidate + min_inclusive
 
 class IntegerNat(IntegerBase):
-    def __init__(
-        self,
-        value: Union[IntegerBase, int],
-        _min_bits: int = 0
-    ) -> None:
+    def __init__(self, value: Union[IntegerBase, int], _min_bits: int = 0) -> None:
         self._public = False
         self.value = int(value)
         self._bits = max(1, self.value.bit_length(), _min_bits)
@@ -284,32 +280,9 @@ class IntegerNat(IntegerBase):
         return self
 
     @staticmethod
-    def _conv(term: Any) -> "IntegerNat":
-        if isinstance(term, IntegerNat):
-            return term
-        return IntegerNat(operator.index(term))
-
-    def _nw(self) -> int:
-        return max(1, (self._bits + 63) // 64)
-
-    def _is_zero(self) -> bool:
-        return self.value == 0
-
-    def is_odd(self) -> bool:
-        return bool(self.value & 1)
-
-    def __int__(self) -> int:
-        return self.value
-
-    def __index__(self) -> int:
-        return self.value
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-    def __repr__(self) -> str:
-        return "Integer(%s)" % self.value
-
+    def _conv(term: Any): return IntegerNat(operator.index(term))
+    def __index__(self): return self.value
+    
     def to_bytes(
         self,
         block_size: Optional[int] = 0,
@@ -320,16 +293,8 @@ class IntegerNat(IntegerBase):
         return self.value.to_bytes(block_size, byteorder)
 
     @classmethod
-    def from_bytes(
-        cls,
-        byte_string: Union[bytes, bytearray, memoryview],
-        byteorder: str = "big",
-        _min_bits: int = 0,
-        *,
-        public: bool = False,
-    ) -> "IntegerNat":
-        value = int.from_bytes(byte_string, byteorder)
-        return cls(value, _min_bits)
+    def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview], byteorder: str = "big"):
+        return IntegerNat(int.from_bytes(byte_string, byteorder), 0)
 
     # Comparisons
 
