@@ -243,26 +243,12 @@ def random_range(min_inclusive=None, max_inclusive=None, max_exclusive=None,):
 
 class IntegerNat:
     def __init__(self, value, _min_bits: int = 0) -> None:
-        self._public = False
         self.value = int(value)
         self._bits = max(1, self.value.bit_length(), _min_bits)
 
     def _alloc(self, bits: int) -> None:
         self._bits = max(1, bits)
         self.value = 0
-
-    @classmethod
-    def _make(cls, bits: int):
-        obj = cls.__new__(cls)
-        obj._alloc(bits)
-        obj._public = False
-        return obj
-
-    def _adopt(self, other: "IntegerNat"):
-        self.value = other.value
-        self._bits = other._bits
-        self._public = other._public
-        return self
 
     @staticmethod
     def _conv(term: Any): return IntegerNat(operator.index(term))
@@ -381,18 +367,13 @@ class EccKey:
             self._point = self._curve.G * self._d
         return self._point
 
-    def public_key(self):
-        return EccKey(curve=self._curve.canonical, point=self.pointQ)
+    def public_key(self): return EccKey(curve=self._curve.canonical, point=self.pointQ)
 
     def _export_SEC1(self):
         modulus_bytes = self.pointQ.size_in_bytes()
         x, y = self.pointQ._xy
         public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
         return public_key
-
-def _encode_coordinate(value, length) -> bytes:
-    encoded = long_to_bytes(int(value), length)
-    return encoded
 
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
     p = int(curve.p)
@@ -408,8 +389,7 @@ def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
     Zinv = pow(Z, -1, p)
     x = (X * Zinv) % p
     y = (Y * Zinv) % p
-    return (bytearray(x.to_bytes(modulus_bytes, "big")),
-            bytearray(y.to_bytes(modulus_bytes, "big")))
+    return (bytearray(x.to_bytes(modulus_bytes, "big")), bytearray(y.to_bytes(modulus_bytes, "big")))
 
 def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
 
@@ -432,10 +412,8 @@ def _affine_double(P, p: int, a: int = -3):
     return (x3, y3)
 
 def _affine_add(P, Q, p: int, a: int = -3):
-    if P is None:
-        return Q
-    if Q is None:
-        return P
+    if P is None: return Q
+    if Q is None: return P
     x1, y1 = P
     x2, y2 = Q
     if x1 == x2:
@@ -448,7 +426,6 @@ def _affine_add(P, Q, p: int, a: int = -3):
     return (x3, y3)
 
 def _py_scalar_mul(point: dict, k: int, curve) -> dict:
-    """Simple double-and-add (functionally equivalent, not constant-time)."""
     p = int(curve.p)
     if curve.order is not None:
         k = k % int(curve.order)
@@ -478,8 +455,8 @@ class EccPoint:
 
         modulus_bytes = self.size_in_bytes()
 
-        xb = _encode_coordinate(x, modulus_bytes)
-        yb = _encode_coordinate(y, modulus_bytes)
+        xb = long_to_bytes(int(x), modulus_bytes)
+        yb = long_to_bytes(int(y), modulus_bytes)
         # todo why
         p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
         xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
@@ -594,8 +571,6 @@ class DerObjectId:
 
     def _decodeFromStream(self, s):
         DerObject._decodeFromStream(self, s)
-
-        # Derive self.value from self.payload
         p = BytesIO_EOF(self.payload)
 
         subcomps = []
@@ -620,12 +595,7 @@ class DerObjectId:
         self.value = ".".join([str(x) for x in subcomps])
 
     def _convertTag(self, tag: Union[int, bytes]) -> int:
-        """Check if *tag* is a real DER tag (5 bits).
-        Convert it from a character to number if necessary.
-        """
-        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1:
-            tag = tag[0]
-        # Ensure that tag is a low tag
+        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1: tag = tag[0]
         if not (isinstance(tag, int) and 0 <= tag < 0x1F):
             raise ValueError("Wrong DER tag")
         return tag
@@ -641,7 +611,6 @@ class DerObject:
     ) -> None:
         self._tag_octet: Optional[int]
         if asn1Id is None:
-            # The tag octet will be read in with ``decode``
             self._tag_octet = None
             return
 
@@ -650,11 +619,9 @@ class DerObject:
 
 
         if explicit is not None:
-            # 'constructed bit' is always asserted for an EXPLICIT tag
             self._tag_octet = 0x80 | 0x20 | explicit
             self._inner_tag_octet = constructed_bit | asn1Id
         else:
-            # Neither IMPLICIT nor EXPLICIT
             self._tag_octet = constructed_bit | asn1Id
 
     def decode(self, der_encoded: bytes):
