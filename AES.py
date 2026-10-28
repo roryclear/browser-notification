@@ -773,23 +773,28 @@ class DerSequence(DerObject):
         result = DerObject.decode(self, der_encoded)
         return result
 
-    def _decodeFromStream(self, s: Any) -> None:
+    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
         self._seq = []
 
-        # Fill up self.payload
-        DerObject._decodeFromStream(self, s)
+        s.read_byte()
+        length = s.read_byte()
+        if length > 127:
+            encoded_length = s.read(length & 0x7F)
+            length = bytes_to_long(encoded_length)
 
-        # Add one item at a time to self.seq, by scanning self.payload
+        self.payload = s.read(length)
+
         p = BytesIO_EOF(self.payload)
         while p.remaining_data() > 0:
             p.set_bookmark()
+            p.read_byte()
+            length = p.read_byte()
+            if length > 127:
+                encoded_length = p.read(length & 0x7F)
+                length = bytes_to_long(encoded_length)
 
-            der = DerObject()
-            der._decodeFromStream(p)
-            if der._tag_octet != 0x02:
-                self._seq.append(p.data_since_bookmark())
-            else:
-                self._seq.append(1)
+            self.payload = p.read(length)
+            self._seq.append(p.data_since_bookmark())
 
 class DerBitString(DerObject):
     def __init__(
@@ -830,41 +835,11 @@ def _import_rfc5915_der(
 
     d = int.from_bytes(scalar_bytes, byteorder="big")
     return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
-
-class DerSequence2: # todo merge!
-    def __init__(self): pass
-
-    def decode(self, der_encoded: bytes):
-        s = BytesIO_EOF(der_encoded)
-        self._decodeFromStream(s)
-        return self
-
-    def _decodeFromStream(self, s: BytesIO_EOF) -> None:
-        self._seq = []
-
-        s.read_byte()
-        length = s.read_byte()
-        if length > 127:
-            encoded_length = s.read(length & 0x7F)
-            length = bytes_to_long(encoded_length)
-
-        self.payload = s.read(length)
-
-        p = BytesIO_EOF(self.payload)
-        while p.remaining_data() > 0:
-            p.set_bookmark()
-            p.read_byte()
-            length = p.read_byte()
-            if length > 127:
-                encoded_length = p.read(length & 0x7F)
-                length = bytes_to_long(encoded_length)
-
-            self.payload = p.read(length)
-            self._seq.append(p.data_since_bookmark())
                 
 def unwrap(p8_private_key: bytes):
-    pk_info = DerSequence2().decode(p8_private_key)
-    algo = DerSequence2().decode(pk_info._seq[1])
+    pk_info, algo = DerSequence(), DerSequence()
+    pk_info._decodeFromStream(BytesIO_EOF(p8_private_key))
+    algo._decodeFromStream(BytesIO_EOF(pk_info._seq[1]))
     private_key = DerObject().decode(pk_info._seq[2]).payload
     return (private_key, algo._seq[1])
 
