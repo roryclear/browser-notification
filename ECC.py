@@ -571,17 +571,12 @@ def ceil_div(n: int, d: int) -> int:
     if (n != 0) and (q != 0): r += 1
     return r
 
-def _encode_scalar(scalar: Union[int, IntegerBase], min_length: int) -> bytes: return long_to_bytes(scalar)
-
 def _copy_point(point):
     copy = point.__class__.__new__(point.__class__)
     copy._curve = point._curve
     copy.curve = point.curve
-    copy._point = _clone_raw_point(point._curve, point)
+    copy._point = _py_clone_point(point._point)
     return copy
-
-def _clone_raw_point(curve, point) -> dict:
-    return _py_clone_point(point._point)
 
 class StrongRandom:
     def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
