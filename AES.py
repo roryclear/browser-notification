@@ -235,7 +235,7 @@ class IntegerBase(ABC):
         significant_bits_msb = 8 - (bytes_needed * 8 - bits)
         msb = secrets.token_bytes(1)[0]
         msb &= (1 << significant_bits_msb) - 1
-        ret = cls.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
+        ret = IntegerNat.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
         return ret
 
     @classmethod
@@ -252,7 +252,7 @@ class IntegerBase(ABC):
         bits_needed = norm_maximum.size_in_bits()
 
         while True:
-            norm_candidate = cls.random(max_bits=bits_needed)
+            norm_candidate = IntegerNat.random(max_bits=bits_needed)
             if norm_candidate <= norm_maximum:
                 return norm_candidate + min_inclusive
 
@@ -293,20 +293,16 @@ class IntegerNat(IntegerBase):
         return self.value.to_bytes(block_size, byteorder)
 
     @classmethod
-    def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview], byteorder: str = "big"):
-        return IntegerNat(int.from_bytes(byte_string, byteorder), 0)
+    def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview]):
+        return IntegerNat(int.from_bytes(byte_string, "big"))
 
     def _cmp(self, term: Any) -> int:
         other = int(term)
         return (self.value > other) - (self.value < other)
 
-    def __le__(self, term: Any) -> bool:
-        return self._cmp(term) <= 0
+    def __le__(self, term: Any) -> bool: return self._cmp(term) <= 0
 
-    def __gt__(self, term: Any) -> bool:
-        return self._cmp(term) > 0
-    # Arithmetic
-
+    def __gt__(self, term: Any) -> bool: return self._cmp(term) > 0
     def __add__(self, term: Any):
         other = self._conv(term)
         return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
@@ -316,8 +312,6 @@ class IntegerNat(IntegerBase):
     def __sub__(self, term: Any):
         other = self._conv(term)
         value = self.value - other.value
-        if value < 0:
-            raise ValueError("Natural number subtraction underflow")
         return IntegerNat(value, max(self._bits, other._bits))
 
     def __mul__(self, factor: Any):
@@ -533,7 +527,7 @@ class EccPoint:
     @property
     def _xy(self):
         xb, yb = self._get_xy_bytes()
-        return (IntegerNat.from_bytes(xb), IntegerNat.from_bytes(yb))
+        return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
     def _get_xy_bytes(self) -> tuple:
         return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
