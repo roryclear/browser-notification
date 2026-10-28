@@ -578,28 +578,6 @@ def _copy_point(point):
     copy._point = _py_clone_point(point._point)
     return copy
 
-class StrongRandom:
-    def __init__(self, rng: Optional[Any] = None, randfunc: Optional[Callable] = None) -> None:
-        if randfunc is None and rng is None:
-            self._randfunc = None
-        elif randfunc is not None and rng is None:
-            self._randfunc = randfunc
-        elif randfunc is None and rng is not None:
-            self._randfunc = rng.read
-        else:
-            raise ValueError("Cannot specify both 'rng' and 'randfunc'")
-
-    def getrandbits(self, k: int) -> int:
-        mask = (1 << k) - 1
-        return mask & bytes_to_long(secrets.token_bytes(ceil_div(k, 8)))
-
-class c_uint8_ptr_out:
-    def __init__(self, data: Any) -> None:
-        self._data = data
-        self._copy: Any = None
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None: pass
-
 class VoidPointer:
     def __init__(self): pass
     def get(self): pass
