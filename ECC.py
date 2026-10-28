@@ -182,7 +182,7 @@ def ed448_curve():
     )
     return ed448
 
-def _new_curve(p, b, order, Gx, Gy, bits, oid, desc, openssh):
+def _new_curve(p, b, order, Gx, Gy, bits, oid, desc):
     return _Curve(
         p=IntegerNat(p, public=True),
         order=IntegerNat(order, public=True),
@@ -202,7 +202,7 @@ def p192_curve():
     Gx = 0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012
     Gy = 0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811
 
-    return _new_curve(p, b, order, Gx, Gy, 192, "1.2.840.10045.3.1.1", "NIST P-192", "ecdsa-sha2-nistp192")
+    return _new_curve(p, b, order, Gx, Gy, 192, "1.2.840.10045.3.1.1", "NIST P-192")
 
 
 def p224_curve():
@@ -212,7 +212,7 @@ def p224_curve():
     Gx = 0xB70E0CBD6BB4BF7F321390B94A03C1D356C21122343280D6115C1D21
     Gy = 0xBD376388B5F723FB4C22DFE6CD4375A05A07476444D5819985007E34
 
-    return _new_curve(p, b, order, Gx, Gy, 224, "1.3.132.0.33", "NIST P-224", "ecdsa-sha2-nistp224")
+    return _new_curve(p, b, order, Gx, Gy, 224, "1.3.132.0.33", "NIST P-224")
 
 
 def p256_curve():
@@ -222,7 +222,7 @@ def p256_curve():
     Gx = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
     Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
 
-    return _new_curve(p, b, order, Gx, Gy, 256, "1.2.840.10045.3.1.7", "NIST P-256", "ecdsa-sha2-nistp256")
+    return _new_curve(p, b, order, Gx, Gy, 256, "1.2.840.10045.3.1.7", "NIST P-256")
 
 
 def p384_curve():
@@ -232,7 +232,7 @@ def p384_curve():
     Gx = 0xAA87CA22BE8B05378EB1C71EF320AD746E1D3B628BA79B9859F741E082542A385502F25DBF55296C3A545E3872760AB7
     Gy = 0x3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F
 
-    return _new_curve(p, b, order, Gx, Gy, 384, "1.3.132.0.34", "NIST P-384", "ecdsa-sha2-nistp384")
+    return _new_curve(p, b, order, Gx, Gy, 384, "1.3.132.0.34", "NIST P-384")
 
 
 def p521_curve():
@@ -242,7 +242,7 @@ def p521_curve():
     Gx = 0x000000C6858E06B70404E9CD9E3ECB662395B4429C648139053FB521F828AF606B4D3DBAA14B5E77EFE75928FE1DC127A2FFA8DE3348B3C1856A429BF97E7E31C2E5BD66
     Gy = 0x0000011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650
 
-    return _new_curve(p, b, order, Gx, Gy, 521, "1.3.132.0.35", "NIST P-521", "ecdsa-sha2-nistp521")
+    return _new_curve(p, b, order, Gx, Gy, 521, "1.3.132.0.35", "NIST P-521")
 
 class CurveID:
     P192 = 1
