@@ -30,55 +30,9 @@ class Vapid01(object):
             self._public_key = self.private_key.public_key()
 
     @classmethod
-    def from_raw(cls, private_raw):
-        """Initialize VAPID using a private key point in "raw" or
-        "uncompressed" form. Raw keys consist of a single, 32 octet
-        encoded integer.
-
-        :param private_raw: A private key point in uncompressed form.
-        :type private_raw: bytes
-
-        """
-        key = ec.derive_private_key(
-            int(binascii.hexlify(b64urldecode(private_raw)), 16),
-            curve=ec.SECP256R1(),
-            backend=default_backend(),
-        )
-        return cls(key)
-
-    @classmethod
-    def from_raw_public(cls, public_raw):
-        key = ec.EllipticCurvePublicKey.from_encoded_point(
-            curve=ec.SECP256R1(), data=b64urldecode(public_raw)
-        )
-        ss = cls()
-        ss._public_key = key
-        return ss
-
-    @classmethod
     def from_pem(cls, private_key):
-        """Initialize VAPID using a private key in PEM format.
-
-        :param private_key: A private key in PEM format.
-        :type private_key: bytes
-
-        """
-        # not sure why, but load_pem_private_key fails to deserialize
         return cls.from_der(b"".join(private_key.splitlines()[1:-1]))
-
-    @classmethod
-    def from_der(cls, private_key):
-        """Initialize VAPID using a private key in DER format.
-
-        :param private_key: A private key in DER format and Base64-encoded.
-        :type private_key: bytes
-
-        """
-        key = serialization.load_der_private_key(
-            b64urldecode(private_key), password=None, backend=default_backend()
-        )
-        return cls(key)
-
+    
     @classmethod
     def from_file(cls, private_key_file=None):
         """Initialize VAPID using a file containing a private key in PEM or
