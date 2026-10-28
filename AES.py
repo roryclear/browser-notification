@@ -7,8 +7,10 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from ECC import _Curves, IntegerNat
+from ECC import _Curves
+from abc import ABC
 from binascii import a2b_base64
+import operator
 
 
 KEY_LENGTH = 16
@@ -18,6 +20,189 @@ _GF_R = 0xE1000000000000000000000000000000
 
 SHA256_digest_size = 32
 SHA256_block_size = 64
+
+class IntegerBase(ABC):
+    _public: bool = False
+
+    @classmethod
+    def random(
+        cls,
+        *,
+        max_bits: Optional[int] = None,
+    ):
+        bits = max_bits
+        bytes_needed = ((bits - 1) // 8) + 1
+        significant_bits_msb = 8 - (bytes_needed * 8 - bits)
+        msb = secrets.token_bytes(1)[0]
+        msb &= (1 << significant_bits_msb) - 1
+        ret = cls.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
+        return ret
+
+    @classmethod
+    def random_range(
+        cls,
+        *,
+        min_inclusive=None,
+        max_inclusive=None,
+        max_exclusive=None,
+    ):
+        max_inclusive = max_exclusive - 1
+
+        norm_maximum = cls(max_inclusive) - min_inclusive
+        bits_needed = norm_maximum.size_in_bits()
+
+        while True:
+            norm_candidate = cls.random(max_bits=bits_needed)
+            if norm_candidate <= norm_maximum:
+                return norm_candidate + min_inclusive
+
+class IntegerNat(IntegerBase):
+    def __init__(
+        self,
+        value: Union[IntegerBase, int],
+        _min_bits: int = 0
+    ) -> None:
+        self._public = False
+        self.value = int(value)
+        self._bits = max(1, self.value.bit_length(), _min_bits)
+
+    def _alloc(self, bits: int) -> None:
+        self._bits = max(1, bits)
+        self.value = 0
+
+    @classmethod
+    def _make(cls, bits: int) -> "IntegerNat":
+        obj = cls.__new__(cls)
+        obj._alloc(bits)
+        obj._public = False
+        return obj
+
+    def _adopt(self, other: "IntegerNat") -> "IntegerNat":
+        self.value = other.value
+        self._bits = other._bits
+        self._public = other._public
+        return self
+
+    @staticmethod
+    def _conv(term: Any) -> "IntegerNat":
+        if isinstance(term, IntegerNat):
+            return term
+        return IntegerNat(operator.index(term))
+
+    def _nw(self) -> int:
+        return max(1, (self._bits + 63) // 64)
+
+    def _is_zero(self) -> bool:
+        return self.value == 0
+
+    def is_odd(self) -> bool:
+        return bool(self.value & 1)
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __index__(self) -> int:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def __repr__(self) -> str:
+        return "Integer(%s)" % self.value
+
+    def to_bytes(
+        self,
+        block_size: Optional[int] = 0,
+        byteorder: str = "big",
+    ) -> bytes:
+        if block_size is None or block_size == 0:
+            block_size = max(1, (self.value.bit_length() + 7) // 8)
+        return self.value.to_bytes(block_size, byteorder)
+
+    @classmethod
+    def from_bytes(
+        cls,
+        byte_string: Union[bytes, bytearray, memoryview],
+        byteorder: str = "big",
+        _min_bits: int = 0,
+        *,
+        public: bool = False,
+    ) -> "IntegerNat":
+        value = int.from_bytes(byte_string, byteorder)
+        return cls(value, _min_bits)
+
+    # Comparisons
+
+    def _cmp(self, term: Any) -> int:
+        other = int(term)
+        return (self.value > other) - (self.value < other)
+
+    def __eq__(self, term: Any) -> bool:
+        try:
+            return self.value == int(term)
+        except (TypeError, ValueError):
+            return NotImplemented
+
+    def __lt__(self, term: Any) -> bool:
+        return self._cmp(term) < 0
+
+    def __le__(self, term: Any) -> bool:
+        return self._cmp(term) <= 0
+
+    def __gt__(self, term: Any) -> bool:
+        return self._cmp(term) > 0
+
+    def __ge__(self, term: Any) -> bool:
+        return self._cmp(term) >= 0
+
+    # Arithmetic
+
+    def __add__(self, term: Any) -> "IntegerNat":
+        other = self._conv(term)
+        return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
+
+    __radd__ = __add__
+
+    def __sub__(self, term: Any) -> "IntegerNat":
+        other = self._conv(term)
+        value = self.value - other.value
+        if value < 0:
+            raise ValueError("Natural number subtraction underflow")
+        return IntegerNat(value, max(self._bits, other._bits))
+
+    def __mul__(self, factor: Any) -> "IntegerNat":
+        other = self._conv(factor)
+        return IntegerNat(self.value * other.value, self._bits + other._bits)
+
+    __rmul__ = __mul__
+
+    def __mod__(self, divisor: Any) -> "IntegerNat":
+        divisor = self._check_modulus(divisor)
+        return IntegerNat(self.value % divisor.value, divisor._bits)
+
+    @staticmethod
+    def _check_modulus(
+        modulus: Any,
+        name: str = "Modulus",
+        zero_error: type[Exception] = ZeroDivisionError,
+    ) -> "IntegerNat":
+        modulus = IntegerNat._conv(modulus)
+        if modulus.value == 0:
+            raise zero_error("%s cannot be zero" % name)
+        return modulus
+
+    def size_in_bits(self) -> int:
+        return max(1, self.value.bit_length())
+
+    def inplace_inverse(self, modulus: Any) -> "IntegerNat":
+        modulus = self._check_modulus(modulus)
+        self.value = pow(self.value, -1, modulus.value)
+        self._bits = modulus._bits
+        return self
+
+    def inverse(self, modulus: Any) -> "IntegerNat":
+        result = IntegerNat(self, self._bits)
+        return result.inplace_inverse(modulus)
 
 def decode(pem_data: str) -> tuple[bytes, str, bool]:
     r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
