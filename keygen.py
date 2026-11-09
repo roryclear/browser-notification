@@ -76,7 +76,7 @@ class Vapid(object):
 
 
 def generate_keys():
-    return rust_openssl.ec.generate_private_key(SECP256R1(), None)
+    return rust_openssl.ec.generate_private_key(SECP256R1())
 
 vapid = Vapid()
 vapid.private_key = generate_keys()
