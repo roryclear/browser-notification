@@ -56,45 +56,29 @@ class CurveID: P256 = 3
 
 class _Curves:
     curves: dict[str, Any] = {}
-    p192_names = ["p192", "NIST P-192", "P-192", "prime192v1", "secp192r1", "nistp192"]
-    p224_names = ["p224", "NIST P-224", "P-224", "prime224v1", "secp224r1", "nistp224"]
     p256_names = ["p256", "NIST P-256", "P-256", "prime256v1", "secp256r1", "nistp256"]
-    p384_names = ["p384", "NIST P-384", "P-384", "prime384v1", "secp384r1", "nistp384"]
-    p521_names = ["p521", "NIST P-521", "P-521", "prime521v1", "secp521r1", "nistp521"]
-    ed25519_names = ["ed25519", "Ed25519"]
-    ed448_names = ["ed448", "Ed448"]
-    curve25519_names = ["curve25519", "Curve25519", "X25519"]
-    curve448_names = ["curve448", "Curve448", "X448"]
+    definitions = ((p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),)
 
-    # For each curve: its names, its ID, and the module and function that create it
-    definitions = (
-        (p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),
-    )
 
     all_names = ['p256', 'NIST P-256', 'P-256', 'prime256v1', 'secp256r1', 'nistp256']
 
-    def load(self, name):
-      definition = next((d for d in self.definitions if name in d[0]), None)
-      names, curve_id, _, function = definition
-      curve_func = globals().get(function)
-
-      curve = curve_func()
-      curve.id = curve_id
+    def load(self):
+      names, curve_id, function = ['p256', 'NIST P-256', 'P-256', 'prime256v1', 'secp256r1', 'nistp256'], 3, "p256_curve"
+      curve = p256_curve()
       self.curves.update(dict.fromkeys(names, curve))
       return curve
 
     def __getitem__(self, name):
         curve = self.curves.get(name)
         if curve is None:
-            curve = self.load(name)
-            if not (name in self.curve25519_names or name in self.curve448_names):
-                curve.G = EccPoint(curve.Gx, curve.Gy, name)
+            curve = self.load()
+            curve.G = EccPoint(curve.Gx, curve.Gy, name)
         return curve
 
     def items(self):
-        for name in self.all_names:
-            _ = self[name]
-        return self.curves.items()
+      for name in self.all_names:
+          _ = self[name]
+      return self.curves.items()
 
 def random_integerNat(max_bits):
     bits = max_bits
@@ -104,7 +88,6 @@ def random_integerNat(max_bits):
     msb &= (1 << significant_bits_msb) - 1
     ret = IntegerNat.from_bytes(bytes([msb]) + secrets.token_bytes(bytes_needed - 1))
     return ret
-
 
 def random_range(min_inclusive=None, max_inclusive=None, max_exclusive=None,):
     max_inclusive = max_exclusive - 1
