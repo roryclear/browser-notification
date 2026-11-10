@@ -215,7 +215,7 @@ class EccKey:
         blind_d = self._d * blind
         inv_blind_k = (blind * k).inverse(order)
 
-        r = (self._curve.G * k)._x % order
+        r = (self._curve.G * k)._xy[0] % order
         s = inv_blind_k * (blind * z + blind_d * r) % order
         return (r, s)
 
@@ -284,179 +284,128 @@ def _affine_add(P, Q, p: int, a: int = -3):
     return (x3, y3)
 
 def _py_scalar_mul(point: dict, k: int, curve) -> dict:
-    p = int(curve.p)
-    if curve.order is not None:
-        k = k % int(curve.order)
-    if k == 0 or point["z"] % p == 0:
-        return {"x": 0, "y": 1, "z": 0}
+  p = int(curve.p)
+  if curve.order is not None: k = k % int(curve.order)
+  if k == 0 or point["z"] % p == 0: return {"x": 0, "y": 1, "z": 0}
 
-    Zinv = pow(point["z"], -1, p)
-    ax = (point["x"] * Zinv) % p
-    ay = (point["y"] * Zinv) % p
+  Zinv = pow(point["z"], -1, p)
+  ax = (point["x"] * Zinv) % p
+  ay = (point["y"] * Zinv) % p
 
-    result = None
-    addend = (ax, ay)
-    for bit in bin(k)[2:]:
-        if result is not None:
-            result = _affine_double(result, p)
-        if bit == "1":
-            result = _affine_add(result, addend, p)
+  result = None
+  addend = (ax, ay)
+  for bit in bin(k)[2:]:
+    if result is not None: result = _affine_double(result, p)
+    if bit == "1": result = _affine_add(result, addend, p)
 
-    if result is None:
-        return {"x": 0, "y": 1, "z": 0}
-    return {"x": result[0], "y": result[1], "z": 1}
+  if result is None: return {"x": 0, "y": 1, "z": 0}
+  return {"x": result[0], "y": result[1], "z": 1}
 
 class EccPoint:
     def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
-        self._curve = _Curves()[curve]
-        self.curve = "NIST P-256"
+      self._curve = _Curves()[curve]
+      self.curve = "NIST P-256"
 
-        modulus_bytes = self.size_in_bytes()
+      modulus_bytes = self.size_in_bytes()
 
-        xb = long_to_bytes(int(x), modulus_bytes)
-        yb = long_to_bytes(int(y), modulus_bytes)
-        # todo why
-        p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
-        xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
-        yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
-        self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
+      xb = long_to_bytes(int(x), modulus_bytes)
+      yb = long_to_bytes(int(y), modulus_bytes)
+      # todo why
+      p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
+      xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
+      yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
+      self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
 
     def copy(self):return _copy_point(self)
 
     @property
-    def x(self) -> int:
-        return self.xy[0]
-
-    @property
-    def y(self) -> int:
-        return self.xy[1]
-
-    @property
     def xy(self) -> tuple[int, int]:
-        xb, yb = self._get_xy_bytes()
-        return (bytes_to_long(xb), bytes_to_long(yb))
-
-    @property
-    def _x(self):
-        return self._xy[0]
-
-    @property
-    def _y(self):
-        return self._xy[1]
+      xb, yb = self._get_xy_bytes()
+      return (bytes_to_long(xb), bytes_to_long(yb))
 
     @property
     def _xy(self):
         xb, yb = self._get_xy_bytes()
         return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
-    def _get_xy_bytes(self) -> tuple:
-        return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
-
-    def size_in_bytes(self) -> int:
-        """Size of each coordinate, in bytes."""
-        return (self.size_in_bits() + 7) // 8
-
-    def size_in_bits(self) -> int:
-        """Size of each coordinate, in bits."""
-        return self._curve.modulus_bits
+    def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
+    def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
+    def size_in_bits(self) -> int: return self._curve.modulus_bits
 
 
     def __imul__(self, scalar: int):
-        self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
-        return self
+      self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
+      return self
 
     def __mul__(self, scalar: int):
-        """Return a new point, the scalar product of this one"""
-
-        np = self.copy()
-        np *= scalar
-        return np
+      np = self.copy()
+      np *= scalar
+      return np
 
 def construct(**kwargs) -> EccKey:
-    params = cast(dict[str, Any], kwargs)
+  params = cast(dict[str, Any], kwargs)
 
-    curve_name = params["curve"]
-    point_x = params.pop("point_x", None)
-    point_y = params.pop("point_y", None)
+  curve_name = params["curve"]
+  point_x = params.pop("point_x", None)
+  point_y = params.pop("point_y", None)
 
-    if None not in (point_x, point_y):
-        params["point"] = EccPoint(point_x, point_y, curve_name)
-    new_key = EccKey(**params)
+  if None not in (point_x, point_y): params["point"] = EccPoint(point_x, point_y, curve_name)
+  new_key = EccKey(**params)
 
-    return new_key
+  return new_key
 
 def _import_public_der(ec_point, curve_oid=None, curve_name=None):
-    for _curve_name, curve in _Curves().items():
-        if curve_oid and curve.oid == curve_oid:
-            break
-        if curve_name == _curve_name:
-            break
+  for _curve_name, curve in _Curves().items():
+    if curve_oid and curve.oid == curve_oid: break
+    if curve_name == _curve_name: break
         
-    modulus_bytes = int(curve.p.size_in_bits() / 8)
-    x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
-    y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
-    return construct(curve=_curve_name, point_x=x, point_y=y)
+  modulus_bytes = int(curve.p.size_in_bits() / 8)
+  x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
+  y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
+  return construct(curve=_curve_name, point_x=x, point_y=y)
 
 class BytesIO_EOF:
-    def __init__(self, initial_bytes: bytes) -> None:
-        self._buffer = initial_bytes
-        self._index = 0
-        self._bookmark: Optional[int] = None
+  def __init__(self, initial_bytes: bytes) -> None:
+    self._buffer = initial_bytes
+    self._index = 0
+    self._bookmark: Optional[int] = None
 
-    def set_bookmark(self) -> None:
-        self._bookmark = self._index
+  def set_bookmark(self) -> None: self._bookmark = self._index
 
-    def data_since_bookmark(self) -> bytes:
-        assert self._bookmark is not None
-        return self._buffer[self._bookmark : self._index]
+  def data_since_bookmark(self) -> bytes: return self._buffer[self._bookmark : self._index]
 
-    def remaining_data(self) -> int:
-        return len(self._buffer) - self._index
+  def remaining_data(self) -> int: return len(self._buffer) - self._index
 
-    def read(self, length: int) -> bytes:
-        new_index = self._index + length
-        result = self._buffer[self._index : new_index]
-        self._index = new_index
-        return result
+  def read(self, length: int) -> bytes:
+    new_index = self._index + length
+    result = self._buffer[self._index : new_index]
+    self._index = new_index
+    return result
 
-    def read_byte(self) -> int:
-        return self.read(1)[0]
+  def read_byte(self) -> int: return self.read(1)[0]
 
 class DerObjectId:
-    def __init__(self): pass
+  def __init__(self): pass
 
-    def decode(self, der_encoded: bytes): return DerObject.decode(self, der_encoded)
+  def decode(self, der_encoded: bytes): return DerObject.decode(self, der_encoded)
 
-    def _decodeFromStream(self, s):
-        DerObject._decodeFromStream(self, s)
-        p = BytesIO_EOF(self.payload)
+  def _decodeFromStream(self, s):
+    DerObject._decodeFromStream(self, s)
+    p = BytesIO_EOF(self.payload)
 
-        subcomps = []
+    subcomps = []
+    v = 0
+    while p.remaining_data():
+      c = p.read_byte()
+      v = (v << 7) + (c & 0x7F)
+      if not (c & 0x80):
+        subcomps.append(v)
         v = 0
-        while p.remaining_data():
-            c = p.read_byte()
-            v = (v << 7) + (c & 0x7F)
-            if not (c & 0x80):
-                subcomps.append(v)
-                v = 0
 
-        if len(subcomps) == 0:
-            raise ValueError("Empty payload")
-
-        if subcomps[0] < 40:
-            subcomps[:1] = [0, subcomps[0]]
-        elif subcomps[0] < 80:
-            subcomps[:1] = [1, subcomps[0] - 40]
-        else:
-            subcomps[:1] = [2, subcomps[0] - 80]
-
-        self.value = ".".join([str(x) for x in subcomps])
-
-    def _convertTag(self, tag: Union[int, bytes]) -> int:
-        if isinstance(tag, (bytes, bytearray)) and len(tag) == 1: tag = tag[0]
-        if not (isinstance(tag, int) and 0 <= tag < 0x1F):
-            raise ValueError("Wrong DER tag")
-        return tag
+    if subcomps[0] < 40: subcomps[:1] = [0, subcomps[0]]
+    elif subcomps[0] < 80: subcomps[:1] = [1, subcomps[0] - 40]
+    else: subcomps[:1] = [2, subcomps[0] - 80]
+    self.value = ".".join([str(x) for x in subcomps])
 
 class DerObject:
     def __init__(
@@ -488,13 +437,13 @@ class DerObject:
         return self
 
     def _decodeFromStream(self, s: BytesIO_EOF) -> None:
-        self._tag_octet = s.read_byte()
-        length = s.read_byte()
-        self.payload = s.read(length)
-        if hasattr(self, "_inner_tag_octet"):
-            p = BytesIO_EOF(self.payload)
-            p.read_byte()
-            self.payload = p.read(p.read_byte())
+      self._tag_octet = s.read_byte()
+      length = s.read_byte()
+      self.payload = s.read(length)
+      if hasattr(self, "_inner_tag_octet"):
+        p = BytesIO_EOF(self.payload)
+        p.read_byte()
+        self.payload = p.read(p.read_byte())
 
 class DerSequence(DerObject):
     def __init__(
@@ -544,44 +493,40 @@ class DerSequence(DerObject):
             self._seq.append(p.data_since_bookmark())
 
 class DerBitString(DerObject):
-    def __init__(
-        self,
-        value: Union[bytes, DerObject] = b"",
-        implicit: Optional[Union[int, bytes]] = None,
-        explicit: Optional[Union[int, bytes]] = None,
-    ) -> None:
-        DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
-        self.value = value
+  def __init__(
+      self,
+      value: Union[bytes, DerObject] = b"",
+      implicit: Optional[Union[int, bytes]] = None,
+      explicit: Optional[Union[int, bytes]] = None,
+  ) -> None:
+    DerObject.__init__(self, 0x03, b"", implicit, False, explicit)
+    self.value = value
 
-    def _decodeFromStream(self, s):
-        DerObject._decodeFromStream(self, s)
-        self.value = b""
-        if self.payload:
-            self.value = self.payload[1:]
+  def _decodeFromStream(self, s):
+    DerObject._decodeFromStream(self, s)
+    self.value = b""
+    if self.payload: self.value = self.payload[1:]
 
 
-def _import_rfc5915_der(
-    encoded: bytes, curve_oid: Optional[str] = None
-) -> EccKey:
-    ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
-    scalar_bytes = DerObject().decode(ec_private_key[1]).payload
-    next_element = 2
+def _import_rfc5915_der(encoded: bytes, curve_oid: Optional[str] = None) -> EccKey:
+  ec_private_key = DerSequence().decode(encoded, nr_elements=(2, 3, 4))
+  scalar_bytes = DerObject().decode(ec_private_key[1]).payload
+  next_element = 2
 
-    for curve_name, curve in _Curves().items():
-        if curve.oid == curve_oid:
-            break
+  for curve_name, curve in _Curves().items():
+    if curve.oid == curve_oid: break
 
-    # Try to decode 'publicKey'
-    point_x = point_y = None
-    if next_element < len(ec_private_key):
-        public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
-        public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
-        point_x = public_key.pointQ.x
-        point_y = public_key.pointQ.y
-        next_element += 1
+  # Try to decode 'publicKey'
+  point_x = point_y = None
+  if next_element < len(ec_private_key):
+    public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
+    public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
+    point_x = public_key.pointQ.xy[0]
+    point_y = public_key.pointQ.xy[1]
+    next_element += 1
 
-    d = int.from_bytes(scalar_bytes, byteorder="big")
-    return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
+  d = int.from_bytes(scalar_bytes, byteorder="big")
+  return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
                 
 def unwrap(p8_private_key: bytes):
     pk_info, algo = DerSequence(), DerSequence()
@@ -598,48 +543,47 @@ def _import_pkcs8(encoded):
     return key
 
 def import_key(encoded, curve_name=None):
-    if encoded.startswith(b"-----"):
-        text_encoded = encoded.decode("latin-1")
-        ecparams_start = "-----BEGIN EC PARAMETERS-----"
-        ecparams_end = "-----END EC PARAMETERS-----"
-        text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
-        
-        der_encoded, _, _ = decode(text_encoded)
-        result = _import_pkcs8(der_encoded)
-        return result
+  if encoded.startswith(b"-----"):
+    text_encoded = encoded.decode("latin-1")
+    ecparams_start = "-----BEGIN EC PARAMETERS-----"
+    ecparams_end = "-----END EC PARAMETERS-----"
+    text_encoded = re.sub(ecparams_start + ".*?" + ecparams_end, "", text_encoded, flags=re.DOTALL)
+    
+    der_encoded, _, _ = decode(text_encoded)
+    result = _import_pkcs8(der_encoded)
+    return result
 
-    # SEC1
-    if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04):
-        return _import_public_der(encoded, curve_name=curve_name)
+  # SEC1
+  if len(encoded) > 0 and encoded[0] in (0x02, 0x03, 0x04): return _import_public_der(encoded, curve_name=curve_name)
 
 class SHA256Hash:
     def __init__(self, data=None):
-        self._hash = hashlib.sha256()
-        if data: self.update(data)
+      self._hash = hashlib.sha256()
+      if data: self.update(data)
 
     def update(self, data): self._hash.update(data)
 
     def copy(self):
-        clone = SHA256Hash()
-        clone._hash = self._hash.copy()
-        return clone
+      clone = SHA256Hash()
+      clone._hash = self._hash.copy()
+      return clone
         
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 class HMAC:
     def __init__(self, key, msg = b"") -> None:
-        self.digest_size = SHA256_digest_size
-        if len(key) <= SHA256_digest_size:
-            key_0 = key + b"\x00" * (SHA256_block_size - len(key))
-        else:
-            hash_k = SHA256Hash(key)._hash.digest()()
-            key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
+      self.digest_size = SHA256_digest_size
+      if len(key) <= SHA256_digest_size:
+        key_0 = key + b"\x00" * (SHA256_block_size - len(key))
+      else:
+        hash_k = SHA256Hash(key)._hash.digest()()
+        key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
 
-        key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
-        self._inner = SHA256Hash(key_0_ipad)
-        self._inner.update(msg)
-        key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
-        self._outer = SHA256Hash(key_0_opad)
+      key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
+      self._inner = SHA256Hash(key_0_ipad)
+      self._inner.update(msg)
+      key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
+      self._outer = SHA256Hash(key_0_opad)
 
     def digest(self) -> bytes:
         frozen_outer_hash = self._outer.copy()
@@ -666,60 +610,56 @@ def HKDF(master, key_len, salt, context):
 
 class DssSigScheme:
     def __init__(self, key: Union[Any, Any], order: Any) -> None:
-        self._key = key
-        self._order = order
+      self._key = key
+      self._order = order
 
-        self._order_bits = self._order.size_in_bits()
-        self._order_bytes = (self._order_bits - 1) // 8 + 1
+      self._order_bits = self._order.size_in_bits()
+      self._order_bytes = (self._order_bits - 1) // 8 + 1
 
     def sign(self, msg_hash) -> bytes:
-        nonce = self._compute_nonce()
-        z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
-        sig_pair = self._key._sign(z, nonce)
-        output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
-        return output
+      nonce = self._compute_nonce()
+      z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
+      sig_pair = self._key._sign(z, nonce)
+      output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
+      return output
 
 class FipsEcDsaSigScheme(DssSigScheme):
     def __init__(self, key: Any) -> None:
-        order = key._curve.order
-        super().__init__(key, order)
-        self._randfunc = None
+      order = key._curve.order
+      super().__init__(key, order)
+      self._randfunc = None
 
     def _compute_nonce(self):
-        n = int(self._key._curve.order)
-        return secrets.randbelow(n - 1) + 1
+      n = int(self._key._curve.order)
+      return secrets.randbelow(n - 1) + 1
 
 def _gf_mult(x: int, y: int) -> int:
     z = 0
     v = y
     for i in range(128):
-        if (x >> (127 - i)) & 1:
-            z ^= v
-        if v & 1:
-            v = (v >> 1) ^ _GF_R
-        else:
-            v >>= 1
+      if (x >> (127 - i)) & 1: z ^= v
+      if v & 1: v = (v >> 1) ^ _GF_R
+      else: v >>= 1
     return z
 
 
 class _GHASH:
-    __slots__ = ("_h", "_last_y")
+  __slots__ = ("_h", "_last_y")
 
-    def __init__(self, subkey: bytes) -> None:
-        self._h = bytes_to_long(subkey)   # H
-        self._last_y = 0                  # Y_0 = 0
+  def __init__(self, subkey: bytes) -> None:
+    self._h = bytes_to_long(subkey)   # H
+    self._last_y = 0                  # Y_0 = 0
 
-    def update(self, block_data) -> "_GHASH":
-        data = bytes(block_data)
-        h = self._h
-        y = self._last_y
-        for i in range(0, len(data), 16):
-            y = _gf_mult(y ^ bytes_to_long(data[i:i + 16]), h)
-        self._last_y = y
-        return self
+  def update(self, block_data) -> "_GHASH":
+    data = bytes(block_data)
+    h = self._h
+    y = self._last_y
+    for i in range(0, len(data), 16): y = _gf_mult(y ^ bytes_to_long(data[i:i + 16]), h)
+    self._last_y = y
+    return self
 
-    @property
-    def digest(self) -> bytes: return long_to_bytes(self._last_y, 16)
+  @property
+  def digest(self) -> bytes: return long_to_bytes(self._last_y, 16)
 
 def b64urlencode(data): return base64.urlsafe_b64encode(data).replace(b"=", b"").decode("utf8")
 
@@ -732,11 +672,7 @@ def sign(claims, key):
     )
 
     token = "{}.{}".format(header, claims)
-
     signer = FipsEcDsaSigScheme(key)
-
-    # todo patch throw in lib
-    import hashlib
     signature = signer.sign(hashlib.sha256(token.encode("utf8")))
 
     return "{}.{}".format(token, b64urlencode(signature))
@@ -781,7 +717,7 @@ class Vapid:
 def derive_key(salt, private_key, dh, auth_secret):
     receiver_pub = import_key(dh, curve_name="P-256")
     shared_point = receiver_pub.pointQ * private_key._d
-    secret = int(shared_point.x).to_bytes(32, "big")
+    secret = int(shared_point.xy[0]).to_bytes(32, "big")
     sender_pub = private_key.public_key()._export_SEC1()
     context = b"WebPush: info\x00" + dh + sender_pub
     secret = HKDF(secret, 32, auth_secret, context=context)
@@ -1087,7 +1023,6 @@ def rijndael_encrypt(rk, nr, pt):
              ^ (Te4[ s2     &0xff] & 0x000000ff)
              ^ rk[off+3], 12)
     return ct
-
 
 class BlockState:
     def __init__(self, key):
