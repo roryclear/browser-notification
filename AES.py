@@ -654,24 +654,6 @@ class Vapid:
     self._private_key = private_key
     self._public_key = private_key.public_key()
 
-  @classmethod
-  def from_pem(cls, private_key):
-      return cls(import_key(private_key))
-
-  def sign(self, claims):
-      token = copy.deepcopy(claims)
-      token["exp"] = int(time.time()) + 86400
-      
-      token = sign(token, self._private_key)
-
-      public_key = self._public_key._export_SEC1()
-
-      return {
-          "Authorization": "{} t={},k={}".format(
-            "vapid", token, b64urlencode(public_key)
-          )
-      }
-
 def HKDF(master, key_len, salt, context):
   prk = HMAC(salt, master).digest()
   okm = _HKDF_expand(prk, context, key_len)
@@ -721,9 +703,15 @@ def aes_encrypt(content, headers=None):
 
     vapid_claims = {"sub": "mailto:fake@fake.invalid", "aud": f"{url.scheme}://{url.netloc}"}
 
-    with open("vapid_private.pem", "rb") as f: vv = Vapid.from_pem(f.read())
+    with open("vapid_private.pem", "rb") as f: vv = Vapid(import_key(f.read()))
 
-    headers = vv.sign(vapid_claims)
+    token = copy.deepcopy(vapid_claims)
+    token["exp"] = int(time.time()) + 86400
+    
+    token = sign(token, vv._private_key)
+    public_key = vv._public_key._export_SEC1()
+    headers = {"Authorization": "{} t={},k={}".format("vapid", token, b64urlencode(public_key))}
+
 
     rs = 4096
     private_key = generate(curve="P-256")
