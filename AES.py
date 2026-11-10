@@ -6,103 +6,32 @@ import copy, time
 import secrets
 from urllib.parse import urlparse
 import hashlib, re
-from abc import ABC
 from binascii import a2b_base64
 import operator, random
 
 
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
-
 _GF_R = 0xE1000000000000000000000000000000
-
 SHA256_digest_size = 32
 SHA256_block_size = 64
 
 def generate(*, curve):
-    curve_name = curve
-    curve_info = _Curves()[curve_name]
-    d = random.randrange(1, curve_info.order)
-    new_key = EccKey(curve=curve_name, d=d)
-
-    return new_key
+  curve_name = curve
+  curve_info = _Curves()[curve_name]
+  d = random.randrange(1, curve_info.order)
+  new_key = EccKey(curve=curve_name, d=d)
+  return new_key
 
 class _Curve:
-    def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None):
-        self.p = p
-        self.order = order
-        self.Gx = Gx
-        self.Gy = Gy
-        self.modulus_bits = modulus_bits
-        self.oid = oid
-        self.canonical = canonical
-
-def curve25519_curve():
-    p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
-    order = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
-    curve25519 = _Curve(
-        p=IntegerNat(p),
-        order=IntegerNat(order),
-        Gx=IntegerNat(9),
-        Gy=None,
-        modulus_bits=255,
-        oid="1.3.101.110",  # RFC8410
-        canonical="Curve25519"
-    )
-    return curve25519
-
-
-def curve448_curve():
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
-    order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
-
-    curve448 = _Curve(
-        p=IntegerNat(p),
-        order=IntegerNat(order),
-        Gx=IntegerNat(5),
-        Gy=None,
-        modulus_bits=448,
-        oid="1.3.101.111",  # RFC8410
-        canonical="Curve448",
-    )
-
-    return curve448
-
-def ed25519_curve():
-    p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED  # 2**255 - 19
-    order = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
-    Gx = 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A
-    Gy = 0x6666666666666666666666666666666666666666666666666666666666666658
-
-    ed25519 = _Curve(
-        p=IntegerNat(p),
-        order=IntegerNat(order),
-        Gx=IntegerNat(Gx),
-        Gy=IntegerNat(Gy),
-        modulus_bits=255,
-        oid="1.3.101.112",  # RFC8410
-        canonical="Ed25519",
-    )
-    return ed25519
-
-
-def ed448_curve():
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF  # 2**448 - 2**224 - 1
-    order = 0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3
-    Gx = 0x4F1970C66BED0DED221D15A622BF36DA9E146570470F1767EA6DE324A3D3A46412AE1AF72AB66511433B80E18B00938E2626A82BC70CC05E
-    Gy = 0x693F46716EB6BC248876203756C9C7624BEA73736CA3984087789C1E05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14
-
-
-    ed448 = _Curve(
-        p=IntegerNat(p),
-        order=IntegerNat(order),
-        Gx=IntegerNat(Gx),
-        Gy=IntegerNat(Gy),
-        modulus_bits=448,
-        oid="1.3.101.113",  # RFC8410
-        canonical="Ed448",
-    )
-    return ed448
+  def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None):
+    self.p = p
+    self.order = order
+    self.Gx = Gx
+    self.Gy = Gy
+    self.modulus_bits = modulus_bits
+    self.oid = oid
+    self.canonical = canonical
 
 def _new_curve(p, order, Gx, Gy, bits, oid, desc):
     return _Curve(
@@ -115,25 +44,6 @@ def _new_curve(p, order, Gx, Gy, bits, oid, desc):
         canonical=desc,
     )
 
-
-def p192_curve():
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFF
-    order = 0xFFFFFFFFFFFFFFFFFFFFFFFF99DEF836146BC9B1B4D22831
-    Gx = 0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012
-    Gy = 0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811
-
-    return _new_curve(p, order, Gx, Gy, 192, "1.2.840.10045.3.1.1", "NIST P-192")
-
-
-def p224_curve():
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000001
-    order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF16A2E0B8F03E13DD29455C5C2A3D
-    Gx = 0xB70E0CBD6BB4BF7F321390B94A03C1D356C21122343280D6115C1D21
-    Gy = 0xBD376388B5F723FB4C22DFE6CD4375A05A07476444D5819985007E34
-
-    return _new_curve(p, order, Gx, Gy, 224, "1.3.132.0.33", "NIST P-224")
-
-
 def p256_curve():
     p = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
     order = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
@@ -142,34 +52,7 @@ def p256_curve():
 
     return _new_curve(p, order, Gx, Gy, 256, "1.2.840.10045.3.1.7", "NIST P-256")
 
-
-def p384_curve():
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFF0000000000000000FFFFFFFF
-    order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC7634D81F4372DDF581A0DB248B0A77AECEC196ACCC52973
-    Gx = 0xAA87CA22BE8B05378EB1C71EF320AD746E1D3B628BA79B9859F741E082542A385502F25DBF55296C3A545E3872760AB7
-    Gy = 0x3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F
-
-    return _new_curve(p, order, Gx, Gy, 384, "1.3.132.0.34", "NIST P-384")
-
-
-def p521_curve():
-    p = 0x000001FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-    order = 0x000001FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5C9B8899C47AEBB6FB71E91386409
-    Gx = 0x000000C6858E06B70404E9CD9E3ECB662395B4429C648139053FB521F828AF606B4D3DBAA14B5E77EFE75928FE1DC127A2FFA8DE3348B3C1856A429BF97E7E31C2E5BD66
-    Gy = 0x0000011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650
-
-    return _new_curve(p, order, Gx, Gy, 521, "1.3.132.0.35", "NIST P-521")
-
-class CurveID:
-    P192 = 1
-    P224 = 2
-    P256 = 3
-    P384 = 4
-    P521 = 5
-    ED25519 = 6
-    ED448 = 7
-    CURVE25519 = 8
-    CURVE448 = 9
+class CurveID: P256 = 3
 
 class _Curves:
     curves: dict[str, Any] = {}
@@ -185,28 +68,20 @@ class _Curves:
 
     # For each curve: its names, its ID, and the module and function that create it
     definitions = (
-        (p192_names, CurveID.P192, "_nist_ecc", "p192_curve"),
-        (p224_names, CurveID.P224, "_nist_ecc", "p224_curve"),
         (p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),
-        (p384_names, CurveID.P384, "_nist_ecc", "p384_curve"),
-        (p521_names, CurveID.P521, "_nist_ecc", "p521_curve"),
-        (ed25519_names, CurveID.ED25519, "_edwards", "ed25519_curve"),
-        (ed448_names, CurveID.ED448, "_edwards", "ed448_curve"),
-        (curve25519_names, CurveID.CURVE25519, "_montgomery", "curve25519_curve"),
-        (curve448_names, CurveID.CURVE448, "_montgomery", "curve448_curve"),
     )
 
-    all_names = [name for definition in definitions for name in definition[0]]
+    all_names = ['p256', 'NIST P-256', 'P-256', 'prime256v1', 'secp256r1', 'nistp256']
 
     def load(self, name):
-        definition = next((d for d in self.definitions if name in d[0]), None)
-        names, curve_id, _, function = definition
-        curve_func = globals().get(function)
+      definition = next((d for d in self.definitions if name in d[0]), None)
+      names, curve_id, _, function = definition
+      curve_func = globals().get(function)
 
-        curve = curve_func()
-        curve.id = curve_id
-        self.curves.update(dict.fromkeys(names, curve))
-        return curve
+      curve = curve_func()
+      curve.id = curve_id
+      self.curves.update(dict.fromkeys(names, curve))
+      return curve
 
     def __getitem__(self, name):
         curve = self.curves.get(name)
@@ -1272,14 +1147,12 @@ class EcbMode:
 
 class CtrMode:
     def __init__(
-        self,
-        block_cipher,
-        initial_counter_block,
-        prefix_len: int,
-        counter_len: int,
-        little_endian: bool,
-    ):
-
+      self,
+      block_cipher,
+      initial_counter_block,
+      prefix_len: int,
+      counter_len: int,
+      little_endian: bool):
         self._cipher      = block_cipher
         self.block_size   = len(initial_counter_block)
         self._counter     = bytearray(initial_counter_block)
@@ -1294,36 +1167,33 @@ class CtrMode:
         self._max_bytes = (1 << (8 * counter_len)) * self.block_size
 
     def _increment_counter(self, counter: bytearray) -> None:
-        p, c = self._prefix_len, self._counter_len
-        if self._little_endian:
-            for k in range(c):
-                counter[p + k] = (counter[p + k] + 1) & 0xff
-                if counter[p + k]:
-                    return
-        else:
-            for k in range(c):
-                i = p + c - 1 - k
-                counter[i] = (counter[i] + 1) & 0xff
-                if counter[i]:
-                    return
+      p, c = self._prefix_len, self._counter_len
+      if self._little_endian:
+        for k in range(c):
+          counter[p + k] = (counter[p + k] + 1) & 0xff
+          if counter[p + k]: return
+      else:
+        for k in range(c):
+          i = p + c - 1 - k
+          counter[i] = (counter[i] + 1) & 0xff
+          if counter[i]: return
 
     def _consume(self, n: int) -> bytes:
-        out = bytearray()
-        rem = n
-        while rem:
-            if self._used == 0:
-                self._keystream = self._cipher.encrypt_block(bytes(self._counter))
-                self._increment_counter(self._counter)
-            take = min(rem, self.block_size - self._used)
-            out += self._keystream[self._used : self._used + take]
-            self._used += take
-            rem -= take
-            if self._used == self.block_size:
-                self._used, self._keystream = 0, None
-        self._bytes_processed += n
-        return bytes(out)
+      out = bytearray()
+      rem = n
+      while rem:
+        if self._used == 0:
+          self._keystream = self._cipher.encrypt_block(bytes(self._counter))
+          self._increment_counter(self._counter)
+        take = min(rem, self.block_size - self._used)
+        out += self._keystream[self._used : self._used + take]
+        self._used += take
+        rem -= take
+        if self._used == self.block_size: self._used, self._keystream = 0, None
+      self._bytes_processed += n
+      return bytes(out)
 
     def encrypt(self, plaintext):
-        data = bytes(plaintext)
-        ks = self._consume(len(data))
-        return bytes(a ^ b for a, b in zip(data, ks))
+      data = bytes(plaintext)
+      ks = self._consume(len(data))
+      return bytes(a ^ b for a, b in zip(data, ks))
