@@ -20,13 +20,12 @@ SHA256_block_size = 64
 def generate(*, curve):
   curve_info = p256_curve()
   curve_info.G = EccPoint(curve_info.Gx, curve_info.Gy, curve)
-  new_key = EccKey(curve=curve, d=random.randrange(1, curve_info.order))
+  new_key = EccKey(curve=curve, d=random.randrange(1, curve_order))
   return new_key
 
 class _Curve:
-  def __init__(self, p=None, order=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None):
+  def __init__(self, p=None, Gx=None, Gy=None, modulus_bits=None, oid=None, canonical=None):
     self.p = p
-    self.order = order
     self.Gx = Gx
     self.Gy = Gy
     self.modulus_bits = modulus_bits
@@ -35,12 +34,10 @@ class _Curve:
 
 def p256_curve():
   p = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
-  order = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
   Gx = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
   Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
   return _Curve(
   p=IntegerNat(p),
-  order=IntegerNat(order),
   Gx=IntegerNat(Gx),
   Gy=IntegerNat(Gy),
   modulus_bits=256,
@@ -183,14 +180,12 @@ class EccKey:
 
     # ECDSA
     def _sign(self, z, k):
-
-      order = self._curve.order
-      blind = random_range(min_inclusive=1, max_exclusive=order)
+      blind = random_range(min_inclusive=1, max_exclusive=curve_order)
 
       blind_d = self._d * blind
-      inv_blind_k = (blind * k).inverse(order)
-      r = (self._curve.G * k)._xy[0] % order
-      s = inv_blind_k * (blind * z + blind_d * r) % order
+      inv_blind_k = (blind * k).inverse(curve_order)
+      r = (self._curve.G * k)._xy[0] % curve_order
+      s = inv_blind_k * (blind * z + blind_d * r) % curve_order
       return (r, s)
 
     @property
@@ -252,24 +247,24 @@ def _affine_add(P, Q, p: int, a: int = -3):
   return (x3, y3)
 
 def _py_scalar_mul(point: dict, k: int, curve) -> dict:
-  p = int(curve.p)
-  if curve.order is not None: k = k % int(curve.order)
-  if k == 0 or point["z"] % p == 0: return {"x": 0, "y": 1, "z": 0}
+  k = k % int(curve_order)
+  if k == 0 or point["z"] % curve_p == 0: return {"x": 0, "y": 1, "z": 0}
 
-  Zinv = pow(point["z"], -1, p)
-  ax = (point["x"] * Zinv) % p
-  ay = (point["y"] * Zinv) % p
+  Zinv = pow(point["z"], -1, curve_p)
+  ax = (point["x"] * Zinv) % curve_p
+  ay = (point["y"] * Zinv) % curve_p
 
   result = None
   addend = (ax, ay)
   for bit in bin(k)[2:]:
-    if result is not None: result = _affine_double(result, p)
-    if bit == "1": result = _affine_add(result, addend, p)
+    if result is not None: result = _affine_double(result, curve_p)
+    if bit == "1": result = _affine_add(result, addend, curve_p)
 
   if result is None: return {"x": 0, "y": 1, "z": 0}
   return {"x": result[0], "y": result[1], "z": 1}
 
 curve_p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
+curve_order = IntegerNat(0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551)
 
 class EccPoint:
   def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
@@ -299,7 +294,7 @@ class EccPoint:
 
   def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes())
   def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
-  def size_in_bits(self) -> int: return self._curve.modulus_bits
+  def size_in_bits(self) -> int: return 256
 
 
   def __imul__(self, scalar: int):
@@ -552,13 +547,12 @@ class HMAC:
 class DssSigScheme:
   def __init__(self, key: Union[Any, Any]) -> None:
     self._key = key
-    self._order = key._curve.order
 
-    self._order_bits = self._order.size_in_bits()
+    self._order_bits = curve_order.size_in_bits()
     self._order_bytes = (self._order_bits - 1) // 8 + 1
 
   def sign(self, msg_hash) -> bytes:
-    n = int(self._key._curve.order)
+    n = int(curve_order)
     nonce = secrets.randbelow(n - 1) + 1
     z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
     sig_pair = self._key._sign(z, nonce)
