@@ -86,9 +86,8 @@ def random_range(min_inclusive=None, max_inclusive=None, max_exclusive=None,):
     bits_needed = norm_maximum.size_in_bits()
 
     while True:
-        norm_candidate = random_integerNat(max_bits=bits_needed)
-        if norm_candidate <= norm_maximum:
-            return norm_candidate + min_inclusive
+      norm_candidate = random_integerNat(max_bits=bits_needed)
+      if norm_candidate <= norm_maximum: return norm_candidate + min_inclusive
 
 class IntegerNat:
     def __init__(self, value, _min_bits: int = 0) -> None:
