@@ -189,7 +189,6 @@ class EccKey:
 
       blind_d = self._d * blind
       inv_blind_k = (blind * k).inverse(order)
-
       r = (self._curve.G * k)._xy[0] % order
       s = inv_blind_k * (blind * z + blind_d * r) % order
       return (r, s)
@@ -207,20 +206,18 @@ class EccKey:
       public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
       return public_key
 
-def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
-  p = int(curve.p)
-  x = int.from_bytes(xb, "big") % p
-  y = int.from_bytes(yb, "big") % p
+def _py_new_point(xb: bytes, yb: bytes) -> dict:
+  x = int.from_bytes(xb, "big") % curve_p
+  y = int.from_bytes(yb, "big") % curve_p
   if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
   return {"x": x, "y": y, "z": 1}
 
-def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
-  p = int(curve.p)
+def _py_get_xy_bytes(point: dict, modulus_bytes: int) -> tuple:
   X, Y, Z = point["x"], point["y"], point["z"]
-  if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
-  Zinv = pow(Z, -1, p)
-  x = (X * Zinv) % p
-  y = (Y * Zinv) % p
+  if Z % curve_p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
+  Zinv = pow(Z, -1, curve_p)
+  x = (X * Zinv) % curve_p
+  y = (Y * Zinv) % curve_p
   return (bytearray(x.to_bytes(modulus_bytes, "big")), bytearray(y.to_bytes(modulus_bytes, "big")))
 
 def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
@@ -272,6 +269,8 @@ def _py_scalar_mul(point: dict, k: int, curve) -> dict:
   if result is None: return {"x": 0, "y": 1, "z": 0}
   return {"x": result[0], "y": result[1], "z": 1}
 
+curve_p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
+
 class EccPoint:
   def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
     self._curve = _curves[curve]
@@ -284,7 +283,7 @@ class EccPoint:
     p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
     xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
     yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
-    self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
+    self._point = _py_new_point(bytes(xb), bytes(yb))
 
   def copy(self):return _copy_point(self)
 
@@ -298,7 +297,7 @@ class EccPoint:
       xb, yb = self._get_xy_bytes()
       return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
-  def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
+  def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes())
   def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
   def size_in_bits(self) -> int: return self._curve.modulus_bits
 
