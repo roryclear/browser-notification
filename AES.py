@@ -589,48 +589,21 @@ class HMAC:
         frozen_outer_hash.update(self._inner._hash.digest())
         return frozen_outer_hash._hash.digest()
 
-def _HKDF_expand(prk, info, L: int) -> bytes:
-    t = [b""]
-    n = 1
-    tlen = 0
-    while tlen < L:
-        hmac = HMAC(prk, t[-1] + info + struct.pack("B", n))
-        t.append(hmac.digest())
-        tlen += SHA256_digest_size
-        n += 1
-    okm = b"".join(t)
-    return okm[:L]
-
-
-def HKDF(master, key_len, salt, context):
-    prk = HMAC(salt, master).digest()
-    okm = _HKDF_expand(prk, context, key_len)
-    return okm[:key_len]
-
 class DssSigScheme:
-    def __init__(self, key: Union[Any, Any], order: Any) -> None:
+    def __init__(self, key: Union[Any, Any]) -> None:
       self._key = key
-      self._order = order
+      self._order = key._curve.order
 
       self._order_bits = self._order.size_in_bits()
       self._order_bytes = (self._order_bits - 1) // 8 + 1
 
     def sign(self, msg_hash) -> bytes:
-      nonce = self._compute_nonce()
+      n = int(self._key._curve.order)
+      nonce = secrets.randbelow(n - 1) + 1
       z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
       sig_pair = self._key._sign(z, nonce)
       output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
       return output
-
-class FipsEcDsaSigScheme(DssSigScheme):
-    def __init__(self, key: Any) -> None:
-      order = key._curve.order
-      super().__init__(key, order)
-      self._randfunc = None
-
-    def _compute_nonce(self):
-      n = int(self._key._curve.order)
-      return secrets.randbelow(n - 1) + 1
 
 def _gf_mult(x: int, y: int) -> int:
     z = 0
@@ -671,7 +644,7 @@ def sign(claims, key):
     )
 
     token = "{}.{}".format(header, claims)
-    signer = FipsEcDsaSigScheme(key)
+    signer = DssSigScheme(key)
     signature = signer.sign(hashlib.sha256(token.encode("utf8")))
 
     return "{}.{}".format(token, b64urlencode(signature))
@@ -713,16 +686,33 @@ class Vapid:
             )
         }
 
+def HKDF(master, key_len, salt, context):
+  prk = HMAC(salt, master).digest()
+  okm = _HKDF_expand(prk, context, key_len)
+  return okm[:key_len]
+
+def _HKDF_expand(prk, info, L: int) -> bytes:
+  t = [b""]
+  n = 1
+  tlen = 0
+  while tlen < L:
+    hmac = HMAC(prk, t[-1] + info + struct.pack("B", n))
+    t.append(hmac.digest())
+    tlen += SHA256_digest_size
+    n += 1
+  okm = b"".join(t)
+  return okm[:L]
+
 def derive_key(salt, private_key, dh, auth_secret):
-    receiver_pub = import_key(dh, curve_name="P-256")
-    shared_point = receiver_pub.pointQ * private_key._d
-    secret = int(shared_point.xy[0]).to_bytes(32, "big")
-    sender_pub = private_key.public_key()._export_SEC1()
-    context = b"WebPush: info\x00" + dh + sender_pub
-    secret = HKDF(secret, 32, auth_secret, context=context)
-    key = HKDF(secret, KEY_LENGTH, salt, context=b"Content-Encoding: aes128gcm\x00")
-    nonce = HKDF(secret, NONCE_LENGTH, salt, context=b"Content-Encoding: nonce\x00")
-    return key, nonce
+  receiver_pub = import_key(dh, curve_name="P-256")
+  shared_point = receiver_pub.pointQ * private_key._d
+  secret = int(shared_point.xy[0]).to_bytes(32, "big")
+  sender_pub = private_key.public_key()._export_SEC1()
+  context = b"WebPush: info\x00" + dh + sender_pub
+  secret = HKDF(secret, 32, auth_secret, context=context)
+  key = HKDF(secret, KEY_LENGTH, salt, context=b"Content-Encoding: aes128gcm\x00")
+  nonce = HKDF(secret, NONCE_LENGTH, salt, context=b"Content-Encoding: nonce\x00")
+  return key, nonce
 
 def iv(base, counter):
     (mask,) = struct.unpack("!Q", base[4:])
