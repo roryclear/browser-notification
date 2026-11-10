@@ -658,18 +658,11 @@ class Vapid:
   def from_pem(cls, private_key):
       return cls(import_key(private_key))
 
-  @classmethod
-  def from_file(cls, private_key_file=None):
-      with open(private_key_file, "rb") as f:
-          return cls.from_pem(f.read())
-
-  def _base_sign(self, claims):
-      cclaims = copy.deepcopy(claims)
-      cclaims["exp"] = int(time.time()) + 86400
-      return cclaims
-
   def sign(self, claims):
-      token = sign(self._base_sign(claims), self._private_key)
+      token = copy.deepcopy(claims)
+      token["exp"] = int(time.time()) + 86400
+      
+      token = sign(token, self._private_key)
 
       public_key = self._public_key._export_SEC1()
 
@@ -728,7 +721,8 @@ def aes_encrypt(content, headers=None):
 
     vapid_claims = {"sub": "mailto:fake@fake.invalid", "aud": f"{url.scheme}://{url.netloc}"}
 
-    vv = Vapid.from_file("vapid_private.pem")
+    with open("vapid_private.pem", "rb") as f: vv = Vapid.from_pem(f.read())
+
     headers = vv.sign(vapid_claims)
 
     rs = 4096
