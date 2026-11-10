@@ -1,3 +1,5 @@
+# from https://github.com/Legrandin/pycryptodome
+
 from typing import Any, Union, Optional, cast
 import os
 import struct
@@ -9,7 +11,6 @@ import hashlib, re
 from binascii import a2b_base64
 import operator, random
 
-
 KEY_LENGTH = 16
 NONCE_LENGTH = 12
 _GF_R = 0xE1000000000000000000000000000000
@@ -17,10 +18,8 @@ SHA256_digest_size = 32
 SHA256_block_size = 64
 
 def generate(*, curve):
-  curve_name = curve
-  curve_info = _Curves()[curve_name]
-  d = random.randrange(1, curve_info.order)
-  new_key = EccKey(curve=curve_name, d=d)
+  curve_info = _Curves()[curve]
+  new_key = EccKey(curve=curve, d=random.randrange(1, curve_info.order))
   return new_key
 
 class _Curve:
