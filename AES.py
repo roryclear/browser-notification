@@ -650,41 +650,34 @@ def sign(claims, key):
     return "{}.{}".format(token, b64urlencode(signature))
 
 class Vapid:
-    def __init__(self, private_key):
-        self._schema = "vapid"
-        self.conf = {}
-        self._private_key = private_key
-        self._public_key = private_key.public_key()
+  def __init__(self, private_key):
+    self._private_key = private_key
+    self._public_key = private_key.public_key()
 
-    @classmethod
-    def from_pem(cls, private_key):
-        return cls(import_key(private_key))
+  @classmethod
+  def from_pem(cls, private_key):
+      return cls(import_key(private_key))
 
-    @classmethod
-    def from_der(cls, private_key):
-        der = b64urldecode(private_key)
-        return cls(import_key(der))
+  @classmethod
+  def from_file(cls, private_key_file=None):
+      with open(private_key_file, "rb") as f:
+          return cls.from_pem(f.read())
 
-    @classmethod
-    def from_file(cls, private_key_file=None):
-        with open(private_key_file, "rb") as f:
-            return cls.from_pem(f.read())
+  def _base_sign(self, claims):
+      cclaims = copy.deepcopy(claims)
+      cclaims["exp"] = int(time.time()) + 86400
+      return cclaims
 
-    def _base_sign(self, claims):
-        cclaims = copy.deepcopy(claims)
-        cclaims["exp"] = int(time.time()) + 86400
-        return cclaims
+  def sign(self, claims):
+      token = sign(self._base_sign(claims), self._private_key)
 
-    def sign(self, claims):
-        token = sign(self._base_sign(claims), self._private_key)
+      public_key = self._public_key._export_SEC1()
 
-        public_key = self._public_key._export_SEC1()
-
-        return {
-            "Authorization": "{} t={},k={}".format(
-                self._schema, token, b64urlencode(public_key)
-            )
-        }
+      return {
+          "Authorization": "{} t={},k={}".format(
+            "vapid", token, b64urlencode(public_key)
+          )
+      }
 
 def HKDF(master, key_len, salt, context):
   prk = HMAC(salt, master).digest()
