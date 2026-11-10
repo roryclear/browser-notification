@@ -60,10 +60,10 @@ class _Curves:
     definitions = ((p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),)
 
 
-    all_names = ['p256', 'NIST P-256', 'P-256', 'prime256v1', 'secp256r1', 'nistp256']
+    all_names = ['p256', 'NIST P-256', 'P-256']
 
     def load(self):
-      names, curve_id, function = ['p256', 'NIST P-256', 'P-256', 'prime256v1', 'secp256r1', 'nistp256'], 3, "p256_curve"
+      names = ['p256', 'NIST P-256', 'P-256']
       curve = p256_curve()
       self.curves.update(dict.fromkeys(names, curve))
       return curve
@@ -76,8 +76,7 @@ class _Curves:
         return curve
 
     def items(self):
-      for name in self.all_names:
-          _ = self[name]
+      for name in self.all_names: _ = self[name]
       return self.curves.items()
 
 def random_integerNat(max_bits):
