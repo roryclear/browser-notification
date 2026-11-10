@@ -58,8 +58,6 @@ class _Curves:
     if curve is None:
       names = ['p256', 'NIST P-256', 'P-256']
       curve = p256_curve()
-
-      
       self.curves.update(dict.fromkeys(names, curve))
       curve.G = EccPoint(curve.Gx, curve.Gy, name)
     return curve
@@ -296,8 +294,8 @@ class EccPoint:
 
   @property
   def _xy(self):
-    xb, yb = self._get_xy_bytes()
-    return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
+      xb, yb = self._get_xy_bytes()
+      return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
   def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
   def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
