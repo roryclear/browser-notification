@@ -55,11 +55,7 @@ def p256_curve():
 class CurveID: P256 = 3
 
 class _Curves:
-    curves: dict[str, Any] = {}
-    p256_names = ["p256", "NIST P-256", "P-256", "prime256v1", "secp256r1", "nistp256"]
-    definitions = ((p256_names, CurveID.P256, "_nist_ecc", "p256_curve"),)
-
-
+    curves: set[str, Any] = {}
     all_names = ['p256', 'NIST P-256', 'P-256']
 
     def load(self):
@@ -71,8 +67,8 @@ class _Curves:
     def __getitem__(self, name):
         curve = self.curves.get(name)
         if curve is None:
-            curve = self.load()
-            curve.G = EccPoint(curve.Gx, curve.Gy, name)
+          curve = self.load()
+          curve.G = EccPoint(curve.Gx, curve.Gy, name)
         return curve
 
     def items(self):
@@ -354,8 +350,8 @@ def construct(**kwargs) -> EccKey:
   return new_key
 
 def _import_public_der(ec_point, curve_oid=None, curve_name=None):
+  print("rory in =",curve_oid, curve_name)
   for _curve_name, curve in _Curves().items():
-    if curve_oid and curve.oid == curve_oid: break
     if curve_name == _curve_name: break
     
   modulus_bytes = int(curve.p.size_in_bits() / 8)
