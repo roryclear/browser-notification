@@ -33,47 +33,43 @@ class _Curve:
     self.oid = oid
     self.canonical = canonical
 
-def _new_curve(p, order, Gx, Gy, bits, oid, desc):
-    return _Curve(
-        p=IntegerNat(p),
-        order=IntegerNat(order),
-        Gx=IntegerNat(Gx),
-        Gy=IntegerNat(Gy),
-        modulus_bits=bits,
-        oid=oid,
-        canonical=desc,
-    )
-
 def p256_curve():
     p = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
     order = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
     Gx = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
     Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
-
-    return _new_curve(p, order, Gx, Gy, 256, "1.2.840.10045.3.1.7", "NIST P-256")
+    return _Curve(
+    p=IntegerNat(p),
+    order=IntegerNat(order),
+    Gx=IntegerNat(Gx),
+    Gy=IntegerNat(Gy),
+    modulus_bits=256,
+    oid="1.2.840.10045.3.1.7",
+    canonical="NIST P-256",
+    )
 
 class CurveID: P256 = 3
 
 class _Curves:
-    curves: set[str, Any] = {}
-    all_names = ['p256', 'NIST P-256', 'P-256']
+  curves: set[str, Any] = {}
+  all_names = ['p256', 'NIST P-256', 'P-256']
 
-    def load(self):
-      names = ['p256', 'NIST P-256', 'P-256']
-      curve = p256_curve()
-      self.curves.update(dict.fromkeys(names, curve))
+  def load(self):
+    names = ['p256', 'NIST P-256', 'P-256']
+    curve = p256_curve()
+    self.curves.update(dict.fromkeys(names, curve))
+    return curve
+
+  def __getitem__(self, name):
+      curve = self.curves.get(name)
+      if curve is None:
+        curve = self.load()
+        curve.G = EccPoint(curve.Gx, curve.Gy, name)
       return curve
 
-    def __getitem__(self, name):
-        curve = self.curves.get(name)
-        if curve is None:
-          curve = self.load()
-          curve.G = EccPoint(curve.Gx, curve.Gy, name)
-        return curve
-
-    def items(self):
-      for name in self.all_names: _ = self[name]
-      return self.curves.items()
+  def items(self):
+    for name in self.all_names: _ = self[name]
+    return self.curves.items()
 
 def random_integerNat(max_bits):
     bits = max_bits
