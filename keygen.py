@@ -1,6 +1,4 @@
-
 import base64
-from cryptography.hazmat.bindings._rust import PublicFormat
 from cryptography.hazmat.bindings._rust import PrivateFormat
 from cryptography.hazmat.bindings._rust import Encoding
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
@@ -22,7 +20,6 @@ with open("vapid_private.pem", "wb") as file:
     file.close()
 
 public_bytes = private_key.public_key().public_bytes()
-
 public_key = base64.urlsafe_b64encode(public_bytes).rstrip(b"=").decode()
 
 print("Private key saved to vapid_private.pem")
