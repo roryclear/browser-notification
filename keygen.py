@@ -21,10 +21,7 @@ with open("vapid_private.pem", "wb") as file:
     file.write(key)
     file.close()
 
-public_bytes = private_key.public_key().public_bytes(
-    Encoding.X962,
-    PublicFormat.UncompressedPoint
-)
+public_bytes = private_key.public_key().public_bytes()
 
 public_key = base64.urlsafe_b64encode(public_bytes).rstrip(b"=").decode()
 
