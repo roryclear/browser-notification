@@ -18,7 +18,8 @@ SHA256_digest_size = 32
 SHA256_block_size = 64
 
 def generate(*, curve):
-  curve_info = _curves[curve]
+  curve_info = p256_curve()
+  curve_info.G = EccPoint(curve_info.Gx, curve_info.Gy, curve)
   new_key = EccKey(curve=curve, d=random.randrange(1, curve_info.order))
   return new_key
 
