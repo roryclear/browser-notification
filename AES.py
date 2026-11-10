@@ -61,14 +61,14 @@ class _Curves:
     return curve
 
   def __getitem__(self, name):
-      curve = self.curves.get(name)
-      if curve is None:
-        curve = self.load()
-        curve.G = EccPoint(curve.Gx, curve.Gy, name)
-      return curve
+    curve = self.curves.get(name)
+    if curve is None:
+      curve = self.load()
+      curve.G = EccPoint(curve.Gx, curve.Gy, name)
+    return curve
 
   def items(self):
-    for name in self.all_names: _ = self[name]
+    for name in self.all_names: self[name]
     return self.curves.items()
 
 def random_integerNat(max_bits):
@@ -113,12 +113,11 @@ class IntegerNat:
         return self.value.to_bytes(block_size, byteorder)
 
     @classmethod
-    def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview]):
-        return IntegerNat(int.from_bytes(byte_string, "big"))
+    def from_bytes(cls, byte_string: Union[bytes, bytearray, memoryview]): return IntegerNat(int.from_bytes(byte_string, "big"))
 
     def _cmp(self, term: Any) -> int:
-        other = int(term)
-        return (self.value > other) - (self.value < other)
+      other = int(term)
+      return (self.value > other) - (self.value < other)
 
     def __le__(self, term: Any) -> bool: return self._cmp(term) <= 0
 
@@ -141,45 +140,34 @@ class IntegerNat:
     __rmul__ = __mul__
 
     def __mod__(self, divisor: Any):
-        divisor = self._check_modulus(divisor)
         return IntegerNat(self.value % divisor.value, divisor._bits)
 
     @staticmethod
-    def _check_modulus(
-        modulus: Any,
-        name: str = "Modulus",
-        zero_error: type[Exception] = ZeroDivisionError,
-    ):
+    def _check_modulus(modulus: Any):
         modulus = IntegerNat._conv(modulus)
-        if modulus.value == 0:
-            raise zero_error("%s cannot be zero" % name)
         return modulus
 
-    def size_in_bits(self) -> int:
-        return max(1, self.value.bit_length())
+    def size_in_bits(self) -> int: return max(1, self.value.bit_length())
 
     def inplace_inverse(self, modulus: Any):
-        modulus = self._check_modulus(modulus)
-        self.value = pow(self.value, -1, modulus.value)
-        self._bits = modulus._bits
-        return self
+      self.value = pow(self.value, -1, modulus.value)
+      return self
 
     def inverse(self, modulus: Any):
-        result = IntegerNat(self, self._bits)
-        return result.inplace_inverse(modulus)
+      result = IntegerNat(self, self._bits)
+      return result.inplace_inverse(modulus)
 
 def decode(pem_data: str) -> tuple[bytes, str, bool]:
-    r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
-    m = r.match(pem_data)
-    marker = m.group(1)
-    lines = pem_data.replace(" ", "").split()
-    data = a2b_base64("".join(lines[1:-1]))
-    enc_flag = False
+  r = re.compile(r"\s*-----BEGIN (.*)-----\s+")
+  m = r.match(pem_data)
+  marker = m.group(1)
+  lines = pem_data.replace(" ", "").split()
+  data = a2b_base64("".join(lines[1:-1]))
+  enc_flag = False
 
-    return (data, marker, enc_flag)
+  return (data, marker, enc_flag)
 
-def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int:
-    return int.from_bytes(s, "big")
+def bytes_to_long(s: Union[bytes, bytearray, memoryview]) -> int: return int.from_bytes(s, "big")
 
 class EccKey:
     def __init__(
@@ -198,81 +186,79 @@ class EccKey:
 
     # ECDSA
     def _sign(self, z, k):
-        assert 0 < k < self._curve.order
 
-        order = self._curve.order
-        blind = random_range(min_inclusive=1, max_exclusive=order)
+      order = self._curve.order
+      blind = random_range(min_inclusive=1, max_exclusive=order)
 
-        blind_d = self._d * blind
-        inv_blind_k = (blind * k).inverse(order)
+      blind_d = self._d * blind
+      inv_blind_k = (blind * k).inverse(order)
 
-        r = (self._curve.G * k)._xy[0] % order
-        s = inv_blind_k * (blind * z + blind_d * r) % order
-        return (r, s)
+      r = (self._curve.G * k)._xy[0] % order
+      s = inv_blind_k * (blind * z + blind_d * r) % order
+      return (r, s)
 
     @property
     def pointQ(self) -> Any:
-        if self._point is None:
-            self._point = self._curve.G * self._d
-        return self._point
+      if self._point is None: self._point = self._curve.G * self._d
+      return self._point
 
     def public_key(self): return EccKey(curve=self._curve.canonical, point=self.pointQ)
 
     def _export_SEC1(self):
-        modulus_bytes = self.pointQ.size_in_bytes()
-        x, y = self.pointQ._xy
-        public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
-        return public_key
+      modulus_bytes = self.pointQ.size_in_bytes()
+      x, y = self.pointQ._xy
+      public_key = b"\x04" + x.to_bytes(modulus_bytes) + y.to_bytes(modulus_bytes)
+      return public_key
 
 def _py_new_point(xb: bytes, yb: bytes, curve: "_Curve") -> dict:
-    p = int(curve.p)
-    x = int.from_bytes(xb, "big") % p
-    y = int.from_bytes(yb, "big") % p
-    if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
-    return {"x": x, "y": y, "z": 1}
+  p = int(curve.p)
+  x = int.from_bytes(xb, "big") % p
+  y = int.from_bytes(yb, "big") % p
+  if x == 0 and y == 0: return {"x": 0, "y": 1, "z": 0}
+  return {"x": x, "y": y, "z": 1}
 
 def _py_get_xy_bytes(point: dict, modulus_bytes: int, curve: "_Curve") -> tuple:
-    p = int(curve.p)
-    X, Y, Z = point["x"], point["y"], point["z"]
-    if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
-    Zinv = pow(Z, -1, p)
-    x = (X * Zinv) % p
-    y = (Y * Zinv) % p
-    return (bytearray(x.to_bytes(modulus_bytes, "big")), bytearray(y.to_bytes(modulus_bytes, "big")))
+  p = int(curve.p)
+  X, Y, Z = point["x"], point["y"], point["z"]
+  if Z % p == 0: return bytearray(modulus_bytes), bytearray(modulus_bytes)
+  Zinv = pow(Z, -1, p)
+  x = (X * Zinv) % p
+  y = (Y * Zinv) % p
+  return (bytearray(x.to_bytes(modulus_bytes, "big")), bytearray(y.to_bytes(modulus_bytes, "big")))
 
 def _py_clone_point(point: dict) -> dict: return {"x": point["x"], "y": point["y"], "z": point["z"]}
 
 def _copy_point(point):
-    copy = point.__class__.__new__(point.__class__)
-    copy._curve = point._curve
-    copy.curve = point.curve
-    copy._point = _py_clone_point(point._point)
-    return copy
+  copy = point.__class__.__new__(point.__class__)
+  copy._curve = point._curve
+  copy.curve = point.curve
+  copy._point = _py_clone_point(point._point)
+  return copy
 
 def _affine_double(P, p: int, a: int = -3):
-    if P is None:
-        return None
-    x, y = P
-    if y % p == 0:
-        return None
-    lam = ((3 * x * x + a) * pow(2 * y, -1, p)) % p
-    x3 = (lam * lam - 2 * x) % p
-    y3 = (lam * (x - x3) - y) % p
-    return (x3, y3)
+  if P is None:
+      return None
+  x, y = P
+  if y % p == 0:
+      return None
+  lam = ((3 * x * x + a) * pow(2 * y, -1, p)) % p
+  x3 = (lam * lam - 2 * x) % p
+  y3 = (lam * (x - x3) - y) % p
+  return (x3, y3)
 
 def _affine_add(P, Q, p: int, a: int = -3):
-    if P is None: return Q
-    if Q is None: return P
-    x1, y1 = P
-    x2, y2 = Q
-    if x1 == x2:
-        if (y1 + y2) % p == 0:
-            return None
-        return _affine_double(P, p, a)
-    lam = ((y2 - y1) * pow(x2 - x1, -1, p)) % p
-    x3 = (lam * lam - x1 - x2) % p
-    y3 = (lam * (x1 - x3) - y1) % p
-    return (x3, y3)
+  if P is None: return Q
+  if Q is None: return P
+  x1, y1 = P
+  x2, y2 = Q
+  if x1 == x2:
+      if (y1 + y2) % p == 0:
+          return None
+      return _affine_double(P, p, a)
+  lam = ((y2 - y1) * pow(x2 - x1, -1, p)) % p
+  x3 = (lam * lam - x1 - x2) % p
+  y3 = (lam * (x1 - x3) - y1) % p
+  return (x3, y3)
 
 def _py_scalar_mul(point: dict, k: int, curve) -> dict:
   p = int(curve.p)
@@ -293,45 +279,44 @@ def _py_scalar_mul(point: dict, k: int, curve) -> dict:
   return {"x": result[0], "y": result[1], "z": 1}
 
 class EccPoint:
-    def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
-      self._curve = _Curves()[curve]
-      self.curve = "NIST P-256"
+  def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
+    self._curve = _Curves()[curve]
+    self.curve = "NIST P-256"
 
-      modulus_bytes = self.size_in_bytes()
+    modulus_bytes = self.size_in_bytes()
 
-      xb = long_to_bytes(int(x), modulus_bytes)
-      yb = long_to_bytes(int(y), modulus_bytes)
-      # todo why
-      p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
-      xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
-      yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
-      self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
+    xb = long_to_bytes(int(x), modulus_bytes)
+    yb = long_to_bytes(int(y), modulus_bytes)
+    p = 115792089210356248762697446949407573530086143415290314195533631308867097853951
+    xb = long_to_bytes(bytes_to_long(xb) % p, modulus_bytes)
+    yb = long_to_bytes(bytes_to_long(yb) % p, modulus_bytes)
+    self._point = _py_new_point(bytes(xb), bytes(yb), self._curve)
 
-    def copy(self):return _copy_point(self)
+  def copy(self):return _copy_point(self)
 
-    @property
-    def xy(self) -> tuple[int, int]:
+  @property
+  def xy(self) -> tuple[int, int]:
+    xb, yb = self._get_xy_bytes()
+    return (bytes_to_long(xb), bytes_to_long(yb))
+
+  @property
+  def _xy(self):
       xb, yb = self._get_xy_bytes()
-      return (bytes_to_long(xb), bytes_to_long(yb))
+      return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
-    @property
-    def _xy(self):
-        xb, yb = self._get_xy_bytes()
-        return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
-
-    def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
-    def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
-    def size_in_bits(self) -> int: return self._curve.modulus_bits
+  def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
+  def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
+  def size_in_bits(self) -> int: return self._curve.modulus_bits
 
 
-    def __imul__(self, scalar: int):
-      self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
-      return self
+  def __imul__(self, scalar: int):
+    self._point = _py_scalar_mul(self._point, int(scalar), self._curve)
+    return self
 
-    def __mul__(self, scalar: int):
-      np = self.copy()
-      np *= scalar
-      return np
+  def __mul__(self, scalar: int):
+    np = self.copy()
+    np *= scalar
+    return np
 
 def construct(**kwargs) -> EccKey:
   params = cast(dict[str, Any], kwargs)
