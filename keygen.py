@@ -61,11 +61,7 @@ class Vapid(object):
 
     def save_key(self, key_file):
         with open(key_file, "wb") as file:
-            key = self._private_key.private_bytes(
-            encoding=Encoding.PEM,
-            format=PrivateFormat.PKCS8,
-            encryption_algorithm=NoEncryption(),
-            )
+            key = self._private_key.private_bytes(encoding=Encoding.PEM, format=PrivateFormat.PKCS8, encryption_algorithm=NoEncryption(),)
             file.write(key)
             file.close()
 
@@ -75,11 +71,8 @@ class Vapid(object):
             file.close()
 
 
-def generate_keys():
-    return rust_openssl.ec.generate_private_key(SECP256R1())
-
 vapid = Vapid()
-vapid.private_key = generate_keys()
+vapid.private_key = rust_openssl.ec.generate_private_key(SECP256R1())
 vapid.save_key("vapid_private.pem")
 
 public_bytes = vapid._public_key.public_bytes(
