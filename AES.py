@@ -350,7 +350,6 @@ def construct(**kwargs) -> EccKey:
   return new_key
 
 def _import_public_der(ec_point, curve_oid=None, curve_name=None):
-  print("rory in =",curve_oid, curve_name)
   for _curve_name, curve in _Curves().items():
     if curve_name == _curve_name: break
     
