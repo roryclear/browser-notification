@@ -18,7 +18,7 @@ SHA256_digest_size = 32
 SHA256_block_size = 64
 
 def generate(*, curve):
-  curve_info = _Curves()[curve]
+  curve_info = _curves[curve]
   new_key = EccKey(curve=curve, d=random.randrange(1, curve_info.order))
   return new_key
 
@@ -53,22 +53,22 @@ class _Curves:
   curves: set[str, Any] = {}
   all_names = ['p256', 'NIST P-256', 'P-256']
 
-  def load(self):
-    names = ['p256', 'NIST P-256', 'P-256']
-    curve = p256_curve()
-    self.curves.update(dict.fromkeys(names, curve))
-    return curve
-
   def __getitem__(self, name):
     curve = self.curves.get(name)
     if curve is None:
-      curve = self.load()
+      names = ['p256', 'NIST P-256', 'P-256']
+      curve = p256_curve()
+
+      
+      self.curves.update(dict.fromkeys(names, curve))
       curve.G = EccPoint(curve.Gx, curve.Gy, name)
     return curve
 
   def items(self):
     for name in self.all_names: self[name]
     return self.curves.items()
+
+_curves = _Curves()
 
 def random_integerNat(max_bits):
     bits = max_bits
@@ -121,15 +121,15 @@ class IntegerNat:
 
     def __gt__(self, term: Any) -> bool: return self._cmp(term) > 0
     def __add__(self, term: Any):
-        other = self._conv(term)
-        return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
+      other = self._conv(term)
+      return IntegerNat(self.value + other.value, max(self._bits, other._bits) + 1)
 
     __radd__ = __add__
 
     def __sub__(self, term: Any):
-        other = self._conv(term)
-        value = self.value - other.value
-        return IntegerNat(value, max(self._bits, other._bits))
+      other = self._conv(term)
+      value = self.value - other.value
+      return IntegerNat(value, max(self._bits, other._bits))
 
     def __mul__(self, factor: Any):
         other = self._conv(factor)
@@ -180,7 +180,7 @@ class EccKey:
         self._d: Any = cast(Any, d)
         self._seed: Any = cast(Any, seed)
         self._point: Any = cast(Any, point)
-        self._curve = _Curves()[curve]
+        self._curve = _curves[curve]
 
     # ECDSA
     def _sign(self, z, k):
@@ -234,11 +234,9 @@ def _copy_point(point):
   return copy
 
 def _affine_double(P, p: int, a: int = -3):
-  if P is None:
-      return None
+  if P is None: return None
   x, y = P
-  if y % p == 0:
-      return None
+  if y % p == 0: return None
   lam = ((3 * x * x + a) * pow(2 * y, -1, p)) % p
   x3 = (lam * lam - 2 * x) % p
   y3 = (lam * (x - x3) - y) % p
@@ -250,9 +248,8 @@ def _affine_add(P, Q, p: int, a: int = -3):
   x1, y1 = P
   x2, y2 = Q
   if x1 == x2:
-      if (y1 + y2) % p == 0:
-          return None
-      return _affine_double(P, p, a)
+    if (y1 + y2) % p == 0: return None
+    return _affine_double(P, p, a)
   lam = ((y2 - y1) * pow(x2 - x1, -1, p)) % p
   x3 = (lam * lam - x1 - x2) % p
   y3 = (lam * (x1 - x3) - y1) % p
@@ -278,7 +275,7 @@ def _py_scalar_mul(point: dict, k: int, curve) -> dict:
 
 class EccPoint:
   def __init__(self, x: Union[int, Any], y: Union[int, Any], curve: Optional[str] = "p256") -> None:
-    self._curve = _Curves()[curve]
+    self._curve = _curves[curve]
     self.curve = "NIST P-256"
 
     modulus_bytes = self.size_in_bytes()
@@ -299,8 +296,8 @@ class EccPoint:
 
   @property
   def _xy(self):
-      xb, yb = self._get_xy_bytes()
-      return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
+    xb, yb = self._get_xy_bytes()
+    return IntegerNat(int.from_bytes(xb)), IntegerNat(int.from_bytes(yb))
 
   def _get_xy_bytes(self) -> tuple: return _py_get_xy_bytes(self._point, self.size_in_bytes(), self._curve)
   def size_in_bytes(self) -> int: return (self.size_in_bits() + 7) // 8
@@ -328,8 +325,8 @@ def construct(**kwargs) -> EccKey:
 
   return new_key
 
-def _import_public_der(ec_point, curve_oid=None, curve_name=None):
-  for _curve_name, curve in _Curves().items():
+def _import_public_der(ec_point, curve_name=None):
+  for _curve_name, curve in _curves.items():
     if curve_name == _curve_name: break
     
   modulus_bytes = int(curve.p.size_in_bits() / 8)
@@ -478,14 +475,13 @@ def _import_rfc5915_der(encoded: bytes, curve_oid: Optional[str] = None) -> EccK
   scalar_bytes = DerObject().decode(ec_private_key[1]).payload
   next_element = 2
 
-  for curve_name, curve in _Curves().items():
+  for curve_name, curve in _curves.items():
     if curve.oid == curve_oid: break
 
-  # Try to decode 'publicKey'
   point_x = point_y = None
   if next_element < len(ec_private_key):
     public_key_enc = DerBitString(explicit=1).decode(ec_private_key[next_element]).value
-    public_key = _import_public_der(public_key_enc, curve_oid=curve_oid)
+    public_key = _import_public_der(public_key_enc)
     point_x = public_key.pointQ.xy[0]
     point_y = public_key.pointQ.xy[1]
     next_element += 1
