@@ -357,7 +357,7 @@ def _import_public_der(ec_point, curve_oid=None, curve_name=None):
   for _curve_name, curve in _Curves().items():
     if curve_oid and curve.oid == curve_oid: break
     if curve_name == _curve_name: break
-        
+    
   modulus_bytes = int(curve.p.size_in_bits() / 8)
   x = int.from_bytes(ec_point[1 : modulus_bytes + 1], byteorder="big")
   y = int.from_bytes(ec_point[modulus_bytes + 1 :], byteorder="big")
@@ -445,51 +445,43 @@ class DerObject:
         self.payload = p.read(p.read_byte())
 
 class DerSequence(DerObject):
-    def __init__(
-        self,
-        startSeq = None,
-        implicit: Optional[int] = None,
-        explicit: Optional[int] = None,
-    ) -> None:
+    def __init__(self, startSeq = None, implicit: Optional[int] = None, explicit: Optional[int] = None) -> None:
         DerObject.__init__(self, 0x10, b"", implicit, True, explicit)
         self._seq: list[Any]
-        if startSeq is None:
-            self._seq = []
-        else:
-            self._seq = cast(list[Any], startSeq)
-
+        if startSeq is None: self._seq = []
+        else: self._seq = cast(list[Any], startSeq)
 
     def __getitem__(self, n: Union[int, slice]) -> Any: return self._seq[n]
 
     def __len__(self) -> int: return len(self._seq)
 
     def decode(self, der_encoded: bytes, nr_elements):
-        self._nr_elements = nr_elements
-        result = DerObject.decode(self, der_encoded)
-        return result
+      self._nr_elements = nr_elements
+      result = DerObject.decode(self, der_encoded)
+      return result
 
     def _decodeFromStream(self, s: BytesIO_EOF) -> None:
-        self._seq = []
+      self._seq = []
 
-        s.read_byte()
-        length = s.read_byte()
-        if length > 127:
-            encoded_length = s.read(length & 0x7F)
-            length = bytes_to_long(encoded_length)
+      s.read_byte()
+      length = s.read_byte()
+      if length > 127:
+          encoded_length = s.read(length & 0x7F)
+          length = bytes_to_long(encoded_length)
 
-        self.payload = s.read(length)
+      self.payload = s.read(length)
 
-        p = BytesIO_EOF(self.payload)
-        while p.remaining_data() > 0:
-            p.set_bookmark()
-            p.read_byte()
-            length = p.read_byte()
-            if length > 127:
-                encoded_length = p.read(length & 0x7F)
-                length = bytes_to_long(encoded_length)
+      p = BytesIO_EOF(self.payload)
+      while p.remaining_data() > 0:
+          p.set_bookmark()
+          p.read_byte()
+          length = p.read_byte()
+          if length > 127:
+              encoded_length = p.read(length & 0x7F)
+              length = bytes_to_long(encoded_length)
 
-            self.payload = p.read(length)
-            self._seq.append(p.data_since_bookmark())
+          self.payload = p.read(length)
+          self._seq.append(p.data_since_bookmark())
 
 class DerBitString(DerObject):
   def __init__(
@@ -528,18 +520,18 @@ def _import_rfc5915_der(encoded: bytes, curve_oid: Optional[str] = None) -> EccK
   return construct(curve=curve_name, d=d, point_x=point_x, point_y=point_y)
                 
 def unwrap(p8_private_key: bytes):
-    pk_info, algo = DerSequence(), DerSequence()
-    pk_info._decodeFromStream(BytesIO_EOF(p8_private_key))
-    algo._decodeFromStream(BytesIO_EOF(pk_info._seq[1]))
-    private_key = DerObject().decode(pk_info._seq[2]).payload
-    return (private_key, algo._seq[1])
+  pk_info, algo = DerSequence(), DerSequence()
+  pk_info._decodeFromStream(BytesIO_EOF(p8_private_key))
+  algo._decodeFromStream(BytesIO_EOF(pk_info._seq[1]))
+  private_key = DerObject().decode(pk_info._seq[2]).payload
+  return (private_key, algo._seq[1])
 
 def _import_pkcs8(encoded):
-    unwrapped = unwrap(encoded)
-    private_key, params = unwrapped
-    curve_oid = DerObjectId().decode(params).value
-    key = _import_rfc5915_der(private_key, curve_oid)
-    return key
+  unwrapped = unwrap(encoded)
+  private_key, params = unwrapped
+  curve_oid = DerObjectId().decode(params).value
+  key = _import_rfc5915_der(private_key, curve_oid)
+  return key
 
 def import_key(encoded, curve_name=None):
   if encoded.startswith(b"-----"):
@@ -570,40 +562,40 @@ class SHA256Hash:
 def strxor(term1, term2, length=None): return bytes(a ^ b for a, b in zip(term1[:length], term2[:length]))
 
 class HMAC:
-    def __init__(self, key, msg = b"") -> None:
-      self.digest_size = SHA256_digest_size
-      if len(key) <= SHA256_digest_size:
-        key_0 = key + b"\x00" * (SHA256_block_size - len(key))
-      else:
-        hash_k = SHA256Hash(key)._hash.digest()()
-        key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
+  def __init__(self, key, msg = b"") -> None:
+    self.digest_size = SHA256_digest_size
+    if len(key) <= SHA256_digest_size:
+      key_0 = key + b"\x00" * (SHA256_block_size - len(key))
+    else:
+      hash_k = SHA256Hash(key)._hash.digest()()
+      key_0 = hash_k + b"\x00" * (SHA256_block_size - len(hash_k))
 
-      key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
-      self._inner = SHA256Hash(key_0_ipad)
-      self._inner.update(msg)
-      key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
-      self._outer = SHA256Hash(key_0_opad)
+    key_0_ipad = strxor(key_0, b"\x36" * len(key_0))
+    self._inner = SHA256Hash(key_0_ipad)
+    self._inner.update(msg)
+    key_0_opad = strxor(key_0, b"\x5c" * len(key_0))
+    self._outer = SHA256Hash(key_0_opad)
 
-    def digest(self) -> bytes:
-        frozen_outer_hash = self._outer.copy()
-        frozen_outer_hash.update(self._inner._hash.digest())
-        return frozen_outer_hash._hash.digest()
+  def digest(self) -> bytes:
+    frozen_outer_hash = self._outer.copy()
+    frozen_outer_hash.update(self._inner._hash.digest())
+    return frozen_outer_hash._hash.digest()
 
 class DssSigScheme:
-    def __init__(self, key: Union[Any, Any]) -> None:
-      self._key = key
-      self._order = key._curve.order
+  def __init__(self, key: Union[Any, Any]) -> None:
+    self._key = key
+    self._order = key._curve.order
 
-      self._order_bits = self._order.size_in_bits()
-      self._order_bytes = (self._order_bits - 1) // 8 + 1
+    self._order_bits = self._order.size_in_bits()
+    self._order_bytes = (self._order_bits - 1) // 8 + 1
 
-    def sign(self, msg_hash) -> bytes:
-      n = int(self._key._curve.order)
-      nonce = secrets.randbelow(n - 1) + 1
-      z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
-      sig_pair = self._key._sign(z, nonce)
-      output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
-      return output
+  def sign(self, msg_hash) -> bytes:
+    n = int(self._key._curve.order)
+    nonce = secrets.randbelow(n - 1) + 1
+    z = int.from_bytes(msg_hash.digest()[:self._order_bytes], byteorder="big")
+    sig_pair = self._key._sign(z, nonce)
+    output = b"".join([long_to_bytes(x, self._order_bytes) for x in sig_pair])
+    return output
 
 def _gf_mult(x: int, y: int) -> int:
     z = 0
@@ -678,12 +670,12 @@ def derive_key(salt, private_key, dh, auth_secret):
   return key, nonce
 
 def iv(base, counter):
-    (mask,) = struct.unpack("!Q", base[4:])
-    return base[:4] + struct.pack("!Q", counter ^ mask)
+  (mask,) = struct.unpack("!Q", base[4:])
+  return base[:4] + struct.pack("!Q", counter ^ mask)
 
 def b64urldecode(data):
-    padded = data.replace(b"+", b"-").replace(b"/", b"_") + b"===="[len(data) % 4 :]
-    return base64.urlsafe_b64decode(padded)
+  padded = data.replace(b"+", b"-").replace(b"/", b"_") + b"===="[len(data) % 4 :]
+  return base64.urlsafe_b64decode(padded)
 
 def aes_encrypt(content, headers=None):
 
@@ -711,18 +703,18 @@ def aes_encrypt(content, headers=None):
     rs = 4096
     private_key = generate(curve="P-256")
     def encrypt_record(key, nonce, counter, buf):
-        nonce = iv(nonce, counter)
-        cipher = GcmMode(key, nonce)
-        ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
-        tag = _compute_mac(cipher)
-        return ciphertext + tag
+      nonce = iv(nonce, counter)
+      cipher = GcmMode(key, nonce)
+      ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
+      tag = _compute_mac(cipher)
+      return ciphertext + tag
 
     def compose_aes128gcm(salt, content, rs, keyid):
-        header = salt
-        header += struct.pack("!L", rs)
-        header += struct.pack("!B", len(keyid))
-        header += keyid
-        return header + content
+      header = salt
+      header += struct.pack("!L", rs)
+      header += struct.pack("!B", len(keyid))
+      header += keyid
+      return header + content
 
     salt = os.urandom(16)
 
@@ -753,48 +745,47 @@ def aes_encrypt(content, headers=None):
 
 
 class GcmMode:
-    def __init__(self, key: Any, nonce: Any) -> None:
-        self.block_size = 16
-        self.nonce = bytes(nonce)
-        self._key = bytes(key)
-        self._tag: Optional[bytes] = None
+  def __init__(self, key: Any, nonce: Any) -> None:
+    self.block_size = 16
+    self.nonce = bytes(nonce)
+    self._key = bytes(key)
+    self._tag: Optional[bytes] = None
 
-        self._mac_len = 16
-        self._no_more_assoc_data = False
-        self._auth_len = 0
-        self._msg_len = 0
-        hash_subkey = EcbMode(key).encrypt(b"\x00" * 16)
+    self._mac_len = 16
+    self._no_more_assoc_data = False
+    self._auth_len = 0
+    self._msg_len = 0
+    hash_subkey = EcbMode(key).encrypt(b"\x00" * 16)
 
-        j0 = self.nonce + b"\x00\x00\x00\x01"
+    j0 = self.nonce + b"\x00\x00\x00\x01"
 
-        nonce_ctr = j0[:12]
-        iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
-        self._cipher = _create_ctr_cipher(
-            key,
-            initial_value=iv_ctr.to_bytes(4, byteorder="big", signed=False),
-            nonce=nonce_ctr,
-        )
-        self._tag_cipher = _create_ctr_cipher(key, initial_value=j0, nonce=b"")
-        self._signer = _GHASH(hash_subkey)
-        self._cache = b""
+    nonce_ctr = j0[:12]
+    iv_ctr = (bytes_to_long(j0) + 1) & 0xFFFFFFFF
+    self._cipher = _create_ctr_cipher(
+        key,
+        initial_value=iv_ctr.to_bytes(4, byteorder="big", signed=False),
+        nonce=nonce_ctr,
+    )
+    self._tag_cipher = _create_ctr_cipher(key, initial_value=j0, nonce=b"")
+    self._signer = _GHASH(hash_subkey)
+    self._cache = b""
 
-    def _update(self, data):
-        if len(self._cache) > 0:
-            filler = min(16 - len(self._cache), len(data))
-            self._cache += bytes(data[:filler])
-            data = data[filler:]
+  def _update(self, data):
+    if len(self._cache) > 0:
+      filler = min(16 - len(self._cache), len(data))
+      self._cache += bytes(data[:filler])
+      data = data[filler:]
 
-            if len(self._cache) < 16: return
+      if len(self._cache) < 16: return
 
-            self._signer.update(self._cache)
-            self._cache = b""
+      self._signer.update(self._cache)
+      self._cache = b""
 
-        update_len = len(data) // 16 * 16
-        self._cache = bytes(data[update_len:])
-        if update_len > 0:
-            if update_len < len(data):
-                data = memoryview(data)[:update_len]
-            self._signer.update(data)
+    update_len = len(data) // 16 * 16
+    self._cache = bytes(data[update_len:])
+    if update_len > 0:
+      if update_len < len(data): data = memoryview(data)[:update_len]
+      self._signer.update(data)
 
 def _compute_mac(cipher: "GcmMode") -> bytes:
     cipher._update(b"\x00" * (16 - len(cipher._cache)))
