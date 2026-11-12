@@ -650,7 +650,7 @@ def aes_encrypt(content, headers=None):
     endpoint = subscription_info["endpoint"]
     url = urlparse(endpoint)
 
-    vapid_claims = {"sub": "mailto:fake@fake.invalid", "aud": f"{url.scheme}://{url.netloc}"}
+    vapid_claims = {"sub": "mailto:hello@clearcam.org", "aud": f"{url.scheme}://{url.netloc}"}
 
     with open("vapid_private.pem", "rb") as f: vv = import_key(f.read())
 
