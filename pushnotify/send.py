@@ -641,64 +641,64 @@ def b64urldecode(data):
   return base64.urlsafe_b64decode(padded)
 
 def aes_encrypt(content, headers=None):
-    with open("notify_keys/keys.json") as f: subscription_info = json.load(f)
-    receiver_key = b64urldecode(subscription_info["keys"]["p256dh"].encode("ascii"))
-    auth_key = b64urldecode(subscription_info["keys"]["auth"].encode("ascii"))
-    endpoint = subscription_info["endpoint"]
-    url = urlparse(endpoint)
-    vapid_claims = {"sub": "mailto:hello@clearcam.org", "aud": f"{url.scheme}://{url.netloc}"}
-    with open("notify_keys/vapid_private.pem", "rb") as f: vv = import_key(f.read())
+  with open("notify_keys/keys.json") as f: subscription_info = json.load(f)
+  receiver_key = b64urldecode(subscription_info["keys"]["p256dh"].encode("ascii"))
+  auth_key = b64urldecode(subscription_info["keys"]["auth"].encode("ascii"))
+  endpoint = subscription_info["endpoint"]
+  url = urlparse(endpoint)
+  vapid_claims = {"sub": "mailto:hello@clearcam.org", "aud": f"{url.scheme}://{url.netloc}"}
+  with open("notify_keys/vapid_private.pem", "rb") as f: vv = import_key(f.read())
 
-    token = copy.deepcopy(vapid_claims)
-    token["exp"] = int(time.time()) + 86400
-    
-    token = sign(token, vv)
-    public_key = vv.public_key()._export_SEC1()
-    headers = {"Authorization": "{} t={},k={}".format("vapid", token, b64urlencode(public_key))}
+  token = copy.deepcopy(vapid_claims)
+  token["exp"] = int(time.time()) + 86400
+  
+  token = sign(token, vv)
+  public_key = vv.public_key()._export_SEC1()
+  headers = {"Authorization": "{} t={},k={}".format("vapid", token, b64urlencode(public_key))}
 
 
-    rs = 4096
-    private_key = generate(curve="P-256")
-    def encrypt_record(key, nonce, counter, buf):
-      nonce = iv(nonce, counter)
-      cipher = GcmMode(key, nonce)
-      ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
-      tag = _compute_mac(cipher)
-      return ciphertext + tag
+  rs = 4096
+  private_key = generate(curve="P-256")
+  def encrypt_record(key, nonce, counter, buf):
+    nonce = iv(nonce, counter)
+    cipher = GcmMode(key, nonce)
+    ciphertext = encrypt(cipher=cipher, plaintext=buf + b"\x02")
+    tag = _compute_mac(cipher)
+    return ciphertext + tag
 
-    def compose_aes128gcm(salt, content, rs, keyid):
-      header = salt
-      header += struct.pack("!L", rs)
-      header += struct.pack("!B", len(keyid))
-      header += keyid
-      return header + content
+  def compose_aes128gcm(salt, content, rs, keyid):
+    header = salt
+    header += struct.pack("!L", rs)
+    header += struct.pack("!B", len(keyid))
+    header += keyid
+    return header + content
 
-    salt = os.urandom(16)
+  salt = os.urandom(16)
 
-    key, nonce = derive_key(
-        salt=salt,
-        private_key=private_key,
-        dh=receiver_key,
-        auth_secret=auth_key,
-    )
+  key, nonce = derive_key(
+      salt=salt,
+      private_key=private_key,
+      dh=receiver_key,
+      auth_secret=auth_key,
+  )
 
-    overhead = 1 + 16
-    chunk_size = rs - overhead
+  overhead = 1 + 16
+  chunk_size = rs - overhead
 
-    result = b""
-    counter = 0
+  result = b""
+  counter = 0
 
-    for i in range(0, len(content), chunk_size):
-        result += encrypt_record(
-            key, nonce, counter, content[i:i + chunk_size]
-        )
-        counter += 1
+  for i in range(0, len(content), chunk_size):
+      result += encrypt_record(
+          key, nonce, counter, content[i:i + chunk_size]
+      )
+      counter += 1
 
-    public_key = private_key.public_key()._export_SEC1()
+  public_key = private_key.public_key()._export_SEC1()
 
-    headers.update({"Content-Encoding": "aes128gcm", "TTL": "60",})
+  headers.update({"Content-Encoding": "aes128gcm", "TTL": "60",})
 
-    return compose_aes128gcm(salt, result, rs, keyid=public_key), headers, endpoint
+  return compose_aes128gcm(salt, result, rs, keyid=public_key), headers, endpoint
 
 
 class GcmMode:
