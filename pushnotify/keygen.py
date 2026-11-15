@@ -12,8 +12,3 @@ def keygen():
   with open("vapid_private.pem", "wb") as file: file.write(private_key)
   public_bytes = subprocess.check_output(["openssl", "pkey", "-pubout", "-outform", "DER"], input=private_key,)[-65:]
   return (base64.urlsafe_b64encode(public_bytes).rstrip(b"=").decode())
-
-
-if __name__ == "__main__":
-  public_key = keygen()
-  print("public key:",public_key)
